@@ -1,0 +1,43 @@
+{
+  "source": "POST /api/v1/dex/pre-transaction/simulate on BSC, recorded 2026-10-07T10:21:27.077Z: a 1 USDT to NVDAB swap built by /aggregator/swap for a public wallet that already held USDT and an allowance to the router. Read-only dry run.",
+  "expect": {
+    "wallet": "0x241190727B21AcB60D346ebCA4334cA5833e5139",
+    "payAmount": "1000000000000000000",
+    "minOut": "4138301146259933",
+    "expectedOut": "4180102167939327"
+  },
+  "success": {
+    "status": "SUCCESS",
+    "failReason": "",
+    "balanceChanges": [
+      {
+        "contractAddress": "0x02Fca66C1D1aFB4E2A7884261eB00F63598a7436",
+        "tokenType": "Erc20",
+        "change": "4180115146058500",
+        "owner": "0x241190727b21acb60d346ebca4334ca5833e5139"
+      },
+      {
+        "contractAddress": "0x55d398326f99059fF775485246999027B3197955",
+        "tokenType": "Erc20",
+        "change": "-1000000000000000000",
+        "owner": "0x241190727b21acb60d346ebca4334ca5833e5139"
+      }
+    ],
+    "allowanceChanges": [
+      {
+        "tokenAddress": "0x55d398326f99059ff775485246999027b3197955",
+        "owner": "0x241190727b21acb60d346ebca4334ca5833e5139",
+        "spender": "0xb44446b0c8e56988c34f7ff73ae904982b5fdda5",
+        "preAmount": "115792089237316195423570985008687907853269984665640564039450584007913129639935",
+        "postAmount": "115792089237316195423570985008687907853269984665640564039449584007913129639935"
+      }
+    ]
+  },
+  "failedSource": "Same endpoint, recorded 2026-10-07T10:21:18.154Z, the deployer swap from an empty wallet.",
+  "failed": {
+    "status": "FAILED",
+    "failReason": "execution reverted: BEP20: transfer amount exceeds balance",
+    "balanceChanges": [],
+    "allowanceChanges": []
+  }
+}
