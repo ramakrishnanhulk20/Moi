@@ -1,0 +1,8 @@
+{
+  "extends": "solhint:recommended",
+  "rules": {
+    "func-visibility": ["warn", { "ignoreConstructors": true }],
+    "import-path-check": "off",
+    "use-natspec": ["warn", { "author": { "enabled": false } }]
+  }
+}

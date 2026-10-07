@@ -1,0 +1,44 @@
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.28"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "forge-std/=lib/forge-std/src/",
+]
+fs_permissions = [{ access = "read-write", path = "./test/vectors" }]
+gas_reports = ["GiftVault"]
+
+[rpc_endpoints]
+# Public BNB Chain node. It serves the latest state only and drops each block's state about a minute later.
+bsc = "https://bsc-dataseed.bnbchain.org"
+# NodeReal key published in the public chain registry (ethereum-lists). It keeps old state, so forks pinned to a
+# past block (test/fork, the anvil rehearsal) keep working after the public node has moved on.
+bsc_archive = "https://bsc-mainnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3"
+
+[fuzz]
+runs = 10000
+
+[invariant]
+runs = 512
+depth = 128
+fail_on_revert = false
+
+[lint]
+# Tests and mocks are hostile on purpose (zero addresses, assembly bombs, raw calls), so only src/ is linted.
+ignore = ["test/**/*.sol"]
+exclude_lints = [
+    # The work order places ITokenCompliance and ICompliance in GiftVault.sol next to the vault.
+    "multi-contract-file",
+    # Gift expiry is a time window by design (threat model C8); a few seconds of validator drift is accepted.
+    "block-timestamp",
+    # The only loop is the constructor listing its starting tokens: one bad token must fail the whole deploy.
+    "require-revert-in-loop",
+    # The delist search writes storage once and then breaks, over at most MAX_TOKENS entries.
+    "costly-loop",
+]
