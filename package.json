@@ -1,0 +1,14 @@
+{
+  "name": "moi",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present",
+    "slice": "npm run slice --workspace=@moi/core",
+    "prove": "npm run prove --workspace=@moi/core",
+    "moi": "npm run moi --workspace=@moi/agent --"
+  }
+}

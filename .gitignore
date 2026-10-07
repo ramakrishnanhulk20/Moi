@@ -1,0 +1,24 @@
+# private planning and agent files, never public
+CLAUDE.md
+INTAKE.md
+PLAN.md
+STATE.md
+DECISIONS.md
+AGENT-RETROS.md
+SPEC.md
+DX-LOG.md
+docs/RD-BRIEF.md
+docs/AUDIT-PACKET.md
+.claude/
+scratchpad/
+reference/
+
+# secrets
+.env
+.env.*
+!.env.example
+
+node_modules/
+.next/
+.next-verify/
+bscscan-verify/
