@@ -167,6 +167,17 @@ describe("createServerDeps", () => {
     }
   });
 
+  it("derives the client hash key from the relayer key, the same on every boot and never the key itself (C46)", async () => {
+    const first = (await boot({ ...BASE, ...UPSTASH })).deps.clientHashKey;
+    expect(first).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(first).toBe((await boot({ ...BASE, ...UPSTASH })).deps.clientHashKey);
+    expect(first).not.toBe(RELAYER_KEY);
+    expect(first).not.toContain("2222222222");
+    const otherKey = `0x${"33".repeat(32)}` as const;
+    const other = await boot({ ...BASE, ...UPSTASH, RELAYER_PRIVATE_KEY: otherKey }, privateKeyToAccount(otherKey).address);
+    expect(other.deps.clientHashKey).not.toBe(first);
+  });
+
   it("allows an unknown country only when MOI_DEV_ALLOW_UNKNOWN_COUNTRY is exactly 1", async () => {
     expect((await boot({ ...BASE, ...UPSTASH, MOI_DEV_ALLOW_UNKNOWN_COUNTRY: "1" })).deps.devAllowUnknownCountry).toBe(true);
     for (const flag of ["true", "0", "yes"]) {

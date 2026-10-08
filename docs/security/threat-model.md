@@ -454,6 +454,48 @@ read from the chain with a Transfer of the exact price in a listed asset to the 
 C43. The server refuses to start unless the vault's relayer() equals the address of its relayer key, and
 the mainnet deploy refuses to run without an owner handover target.
 
+### Added after Ram's Fable audit (2026-10-08)
+C44. One Transfer inside one settlement receipt marks one gift, once. Before a gift is marked, the exact
+Transfer the receipt check (C42) accepted is bound in the store to that vault and gift id, under the
+payee, by transaction hash and log position, for good. A second gift handed the same hash takes the
+next unbound exact Transfer in that receipt or is refused (settlement_unexpected), so a facilitator
+that answers an old hash marks nothing and a batched settlement marks exactly as many gifts as it
+holds Transfers. A replay of the same payment for the same gift finds its own binding and marks.
+Sharpens C24 and C42.
+
+C45. The wrap route reads no gift record and no receipt from a node until that node has reported chain
+56; a node on another chain is "chain_unavailable" and marks nothing. The relayer and every token
+reader already refuse such a node; this closes the one reader that did not.
+
+C46. A client address or a user id is stored or logged only as a keyed hash: HMAC-SHA256 under a key
+only the server holds, derived once at boot from the relayer key by HKDF with its own salt. A plain
+SHA-256 of an IPv4 address is undone by trying all 2^32 addresses; the keyed hash is not. This covers
+the rate-limit counters, the judge per-user and per-network marks and the eight-character tag in refusal
+logs. It does not cover someone who holds the relayer key, who has the server anyway.
+
+C47. The relayer never broadcasts a second claim for a gift because the first request's lock ran out
+while its bytes were in flight. A claim's record is written before the send lock is released, and the
+next holder of the send lock reads the gift's record after its own lock check and before it signs; a
+record it has not already judged replaceable is the answer, with the spend reservation given back.
+Sharpens C18 and C41.
+
+C48. The sender agent trusts a mined transaction only when the chain's own copy of it carries exactly
+the calldata the agent built, from the agent's wallet, to the agent's target; a receipt alone proves
+nothing about the calldata, because the wallet that signed is Binance's, not the agent's. After
+createGift it reads the gift back from the vault and saves a link only when the stored claim key is
+the one it made and the token is the one it bought; otherwise the pending key file stays and the
+sender is told they can refund after expiry. Sharpens C27.
+
+C49. Every hosted route carries the same body cap as http.ts (8 KB) and a function time limit above the
+work it does (150 seconds for /api/wrap, which polls a settlement for 25 seconds and may wait on
+b402 for 25 more per call); a platform default shorter than that would cut a wrap off after the
+payment settled. For the website build; nothing hosted exists yet.
+
+C50. A payment nonce is bound per payee, payer and nonce, never per nonce alone. b402 spends an
+authorization once per (payer, nonce), and Permit2 nonces are each wallet's own counter, so two
+senders can both sign nonce 0; a mark without the payer would call the second sender's first payment
+"reused" for 30 days. Sharpens C24.
+
 ### The five general standards, applied to Moi
 1. Primitives over lists. Where Moi keeps a list, it is the only one, and its gaps are named here.
    - Token list: the vault's on-chain list is the single authority (C22). It covers "only these tokens".
@@ -481,9 +523,11 @@ the mainnet deploy refuses to run without an owner handover target.
      tests and the TypeScript tests check.
    - Amounts: parseUnits with decimals read from chain.
    - Time: seconds from block timestamps everywhere: the contract, the server and the page.
-   - Client address for rate limits: the hosting platform's field.
+   - Client address for rate limits: the hosting platform's field, through canonicalClientIp, then the
+     keyed hash (C46).
    - Payment: one decoded object goes to verify, to settle, and into the comparison with the
      requirements.
+   - Settlement: one Transfer, named by hash and log position, is one mark (C44).
 3. Validate outputs like inputs. Each output, and the consumer that will act on it:
    - Unsigned transactions go to the sender's wallet (C21).
    - 402 requirements go to a paying agent or browser (C24, C27).

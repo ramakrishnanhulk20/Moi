@@ -47,6 +47,12 @@ function canonicalHex32(value: string): string {
   return value.toLowerCase();
 }
 
+// The position of a log inside one receipt: a whole number written once, in decimal.
+function canonicalLogPosition(position: number): string {
+  if (!Number.isSafeInteger(position) || position < 0) throw new RangeError("A log position key needs a whole number from zero up.");
+  return String(position);
+}
+
 // A rate-limit window label such as "post-29345678": lowercase letters, digits and hyphens only,
 // so no label can hold a colon and no letter has two spellings. The caller builds it from a whole
 // minute count; this rule only guarantees the label stays inside its own key.
@@ -113,8 +119,15 @@ export const keys = {
   wrapped(vault: Address, giftId: bigint): StoreKey {
     return key(canonicalAddress(vault), "wrapped", canonicalGiftId(giftId));
   },
-  paymentAuth(payTo: Address, nonceHex: string): StoreKey {
-    return key(canonicalAddress(payTo), "paymentauth", canonicalHex32(nonceHex));
+  // WHY the payer (C24): b402 spends an authorization once per (payer, nonce), and Permit2 nonces
+  // are each wallet's own counter, so two senders can both sign nonce 0. A mark without the payer
+  // would turn the second sender's first payment into "reused".
+  paymentAuth(payTo: Address, payer: Address, nonceHex: string): StoreKey {
+    return key(canonicalAddress(payTo), "paymentauth", `${canonicalAddress(payer)}-${canonicalHex32(nonceHex)}`);
+  },
+  // One Transfer inside one settlement receipt, the unit that marks one gift (C44).
+  settlementUsed(payTo: Address, txHash: string, position: number): StoreKey {
+    return key(canonicalAddress(payTo), "settlement", `${canonicalHex32(txHash)}-${canonicalLogPosition(position)}`);
   },
   // Judge identities and IPs are stored as SHA-256 hashes: a Privy id contains colons and an IP
   // has several spellings, so the caller hashes its one canonical form and only the hash is kept.

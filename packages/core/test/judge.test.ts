@@ -1,12 +1,12 @@
 // Not covered here: a real node, a real vault, the real relayer and Privy. Keys are checked against
 // node:crypto's own HKDF as an independent second implementation; the HTTP route, its body cap,
 // its cache headers and how it reads the platform's IP and country belong to the route.
-import { createHash, hkdfSync } from "node:crypto";
+import { createHash, createHmac, hkdfSync } from "node:crypto";
 import { bytesToHex, getAddress, recoverTypedDataAddress, type Hex, type PublicClient } from "viem";
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CLAIM_TYPES, claimDomain } from "../src/gift.js";
-import { canonicalClientIp, deriveJudgeKey, handleJudgeClaim, JudgeConfigError, judgeWalletMessage, parseJudgePool } from "../src/judge.js";
+import { canonicalClientIp, deriveClientHashKey, deriveJudgeKey, handleJudgeClaim, hashClientId, JudgeConfigError, judgeWalletMessage, parseJudgePool } from "../src/judge.js";
 import { PrivyTokenError, type verifyPrivyAccessToken } from "../src/privy.js";
 import { RelayerBusyError, type createRelayer } from "../src/relayer.js";
 import { createMemoryStore, keys, StoreError, type KvStore } from "../src/store.js";
@@ -99,6 +99,7 @@ const NOW = 1_800_000_000n;
 const TODAY = new Date(Number(NOW) * 1000);
 const DAY = TODAY.toISOString().slice(0, 10);
 const STATE = { None: 0, Open: 1, Claimed: 2, Refunded: 3 } as const;
+const HASH_KEY = `0x${"7c".repeat(32)}` as const;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const sha = (text: string) => `0x${createHash("sha256").update(text).digest("hex")}`;
 
@@ -211,13 +212,14 @@ async function setup(giftIds: bigint[], opts: { judges?: number; overrides?: Rec
     judgeSeed: SEED,
     pool: w.pool,
     privyAppId: APP_ID,
+    clientHashKey: HASH_KEY,
     verifyAccessToken: verifier.verify,
     now: () => TODAY,
   };
   const claim = async (j: Judge, ip = "203.0.113.7", extra: ProofOptions & { country?: string | null } = {}) =>
     handleJudgeClaim(deps, await judgeBody(j, extra), { country: extra.country === undefined ? "IN" : extra.country, clientIp: ip });
-  const userKey = (j: Judge) => keys.judgeUser(VAULT, sha(j.userId));
-  const ipKey = (ip: string) => keys.judgeIpDay(VAULT, sha(ip), DAY);
+  const userKey = async (j: Judge) => keys.judgeUser(VAULT, await hashClientId(HASH_KEY, j.userId));
+  const ipKey = async (ip: string) => keys.judgeIpDay(VAULT, await hashClientId(HASH_KEY, ip), DAY);
   const giftKey = (id: bigint) => keys.judgeGiftTaken(VAULT, id);
   return { ...w, judges, verifier, relayer, store, writes, deps, claim, userKey, ipKey, giftKey };
 }
@@ -254,7 +256,7 @@ describe("handleJudgeClaim", () => {
     expect((await t.claim(first, "203.0.113.7")).status).toBe(200);
     // An IPv4-mapped IPv6 spelling is the same network.
     expect((await t.claim(second, "::FFFF:203.0.113.7")).body).toEqual({ ok: false, error: "too_many_from_network" });
-    expect(await t.store.get(t.userKey(second))).toBeNull();
+    expect(await t.store.get(await t.userKey(second))).toBeNull();
     expect((await t.claim(second, "198.51.100.9")).status).toBe(200);
   });
 
@@ -284,8 +286,8 @@ describe("handleJudgeClaim", () => {
     const t = await setup([101n], { overrides: { "101": { state: STATE.Refunded } } });
     const [judge] = t.judges as [Judge];
     expect(await t.claim(judge)).toEqual({ status: 410, body: { ok: false, error: "pool_empty" } });
-    expect(await t.store.get(t.userKey(judge))).toBeNull();
-    expect(await t.store.get(t.ipKey("203.0.113.7"))).toBeNull();
+    expect(await t.store.get(await t.userKey(judge))).toBeNull();
+    expect(await t.store.get(await t.ipKey("203.0.113.7"))).toBeNull();
     expect(t.relayer.seen).toHaveLength(0);
   });
 
@@ -349,7 +351,7 @@ describe("handleJudgeClaim", () => {
     const t = await setup([101n, 102n], { relayer: fakeRelayer((n) => (n === 1 ? new RelayerBusyError() : { txHash: `0x${"ab".repeat(32)}`, reused: false })) });
     const [judge] = t.judges as [Judge];
     expect(await t.claim(judge)).toEqual({ status: 429, body: { ok: false, error: "busy" } });
-    for (const k of [t.userKey(judge), t.ipKey("203.0.113.7"), t.giftKey(101n)]) expect(await t.store.get(k)).toBeNull();
+    for (const k of [await t.userKey(judge), await t.ipKey("203.0.113.7"), t.giftKey(101n)]) expect(await t.store.get(k)).toBeNull();
     expect((await t.claim(judge)).body).toMatchObject({ ok: true, giftId: "101" });
   });
 
@@ -358,8 +360,41 @@ describe("handleJudgeClaim", () => {
     const [judge] = t.judges as [Judge];
     expect(await t.claim(judge)).toEqual({ status: 503, body: { ok: false, error: "try_again" } });
     expect(await t.store.get(t.giftKey(101n))).not.toBeNull();
-    expect(await t.store.get(t.userKey(judge))).toBeNull();
+    expect(await t.store.get(await t.userKey(judge))).toBeNull();
     expect((await t.claim(judge)).body).toMatchObject({ ok: true, giftId: "102" });
+  });
+
+  it("stores the judge and the network only as keyed hashes: a plain SHA-256 is never a key, and another key gives other records (C46)", async () => {
+    const t = await setup([101n]);
+    const [judge] = t.judges as [Judge];
+    expect((await t.claim(judge)).status).toBe(200);
+    expect(await t.store.get(await t.userKey(judge))).not.toBeNull();
+    expect(await t.store.get(await t.ipKey("203.0.113.7"))).not.toBeNull();
+    expect(await t.store.get(keys.judgeUser(VAULT, sha(judge.userId)))).toBeNull();
+    expect(await t.store.get(keys.judgeIpDay(VAULT, sha("203.0.113.7"), DAY))).toBeNull();
+    const written = t.writes.filter((k) => k.includes(":judgeuser:") || k.includes(":judgeip:"));
+    expect(written).toEqual([await t.userKey(judge), await t.ipKey("203.0.113.7")]);
+
+    // The keyed hash is HMAC-SHA256: node:crypto agrees, and a different key changes every mark.
+    const otherKey = `0x${"7d".repeat(32)}` as const;
+    expect(await hashClientId(HASH_KEY, "203.0.113.7")).toBe(`0x${createHmac("sha256", Buffer.from(HASH_KEY.slice(2), "hex")).update("203.0.113.7").digest("hex")}`);
+    expect(await hashClientId(otherKey, "203.0.113.7")).not.toBe(await hashClientId(HASH_KEY, "203.0.113.7"));
+    for (const bad of ["0x1234", `0x${"7c".repeat(31)}`, HASH_KEY.slice(2)]) {
+      await expect(hashClientId(bad as `0x${string}`, "x")).rejects.toBeInstanceOf(JudgeConfigError);
+    }
+
+    // The server's key comes from a 32-byte secret by HKDF: fixed for one secret, never the secret.
+    const secret = `0x${"22".repeat(32)}` as const;
+    const derived = await deriveClientHashKey(secret);
+    expect(derived).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(derived).toBe(await deriveClientHashKey(secret));
+    expect(derived).toBe(bytesToHex(new Uint8Array(hkdfSync("sha256", Buffer.from(secret.slice(2), "hex"), "moi-client-hash-v1", "client-id", 32))));
+    expect(derived).not.toBe(await deriveClientHashKey(`0x${"23".repeat(32)}`));
+    for (const bad of [`0x${"00".repeat(32)}`, "0x1234"]) {
+      const err = await deriveClientHashKey(bad as `0x${string}`).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(JudgeConfigError);
+      expect((err as Error).message).not.toContain(bad.slice(2, 10));
+    }
   });
 
   it("never puts the seed, a derived key or the access token in a response, and never throws", async () => {

@@ -546,6 +546,29 @@ describe("submitClaim", () => {
     expect(await store.get(keys.relayerSpent(relayerAccount.address, "2026-10-07"))).toBe((PADDED_GAS * GAS_PRICE).toString());
   });
 
+  it("sends one claim, not two, when a request's gift lock runs out during its own broadcast and a second request takes the gift over (C47)", async () => {
+    vi.useFakeTimers();
+    const store = createMemoryStore();
+    // The first request simulates for 59.5 s, so it passes the C41 lock check with half a second
+    // left, then its broadcast takes 2 s: the lock runs out while its bytes are in flight.
+    const slow: FakeOptions = { callDelayMs: 59_500, sendDelayMs: 2_000 };
+    const chain = fakeChain(slow);
+    const relayer = relayerFor(chain, store);
+    const input = await claimInput();
+    const p1 = relayer.submitClaim(input);
+    await vi.advanceTimersByTimeAsync(60_200);
+    slow.callDelayMs = 0;
+    const p2 = relayer.submitClaim(input);
+    await vi.runAllTimersAsync();
+    const [first, second] = await Promise.all([p1, p2]);
+    expect(chain.sent).toHaveLength(1);
+    expect(first).toEqual({ txHash: keccak256(chain.sent[0] as Hex), reused: false });
+    expect(second).toEqual({ txHash: first.txHash, reused: true });
+    expect((await recordIn(store)).hash).toBe(first.txHash);
+    // The second request gave its spend reservation back: one claim was paid for.
+    expect(await store.get(keys.relayerSpent(relayerAccount.address, "2026-10-07"))).toBe((PADDED_GAS * GAS_PRICE).toString());
+  });
+
   it("never reuses a nonce when the node keeps reporting a stale, lower pending count (C39)", async () => {
     const store = createMemoryStore();
     const chain = fakeChain({ stalePendingCount: 7 });

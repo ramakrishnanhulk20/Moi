@@ -78,9 +78,10 @@ Binance's partner, 1:1 backed, which record dividends by raising an on-chain mul
 11. **Data stores**: the chain (gifts, claims, refunds, token balances). The server keeps no
     database. A small shared key-value store (Upstash Redis) holds only values the server made:
     claim records (transaction hash and the signed transaction bytes), per-gift locks, the relayer's
-    nonce counter, its stored signed transactions and daily spend, which gifts are wrapped and which
-    payment paid for them, judge-gift handouts (hashed user and network ids), and rate-limit
-    counters.
+    nonce counter, its stored signed transactions and daily spend, which gifts are wrapped, which
+    payment (payer and nonce) paid for them and which settlement Transfer each one used, judge-gift
+    handouts (keyed hashes of user and network ids), and rate-limit counters (keyed hashes of client
+    addresses).
 
 ## Who calls what, from where
 

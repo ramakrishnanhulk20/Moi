@@ -2,6 +2,7 @@
 // cap, JSON parsing, the rate limits, the fixed headers, the 500 path and its log line, and
 // clientFromHeaders. Not covered here: the handlers themselves (their own test files), a real
 // Upstash store, Vercel's own header rewriting, and node:http (the live local run covers serve.ts).
+import { createHash } from "node:crypto";
 import { getAddress, type PublicClient } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,17 +15,18 @@ vi.mock("../src/judge.js", async (importOriginal) => ({ ...(await importOriginal
 
 import { handleClaim } from "../src/claim.js";
 import { clientFromHeaders, json, MAX_BODY_BYTES, route, type MoiRequest, type ServerDeps } from "../src/http.js";
-import { handleJudgeClaim } from "../src/judge.js";
+import { handleJudgeClaim, hashClientId } from "../src/judge.js";
 import { handleQuote } from "../src/quote.js";
 import { handleGiftStatus } from "../src/status.js";
 import { handleStocks } from "../src/stocks.js";
-import { createMemoryStore, type KvStore } from "../src/store.js";
+import { createMemoryStore, keys, type KvStore } from "../src/store.js";
 import type { Web3Api } from "../src/web3api.js";
 import { handleWrap } from "../src/wrap.js";
 
 const VAULT = getAddress("0x5fbdb2315678afecb367f032d93f642f64180aa3");
 const PAYOUT = getAddress("0x96e854abddc5c618ca843956d1303017b586ab75");
 const TX = `0x${"aa".repeat(32)}` as const;
+const HASH_KEY = `0x${"7c".repeat(32)}` as const;
 // 2026-10-07 12:00:10 UTC, so 50 seconds remain in the current minute.
 const START = Date.UTC(2026, 9, 7, 12, 0, 10);
 const CLAIM_BODY = JSON.stringify({ giftId: "1", recipient: PAYOUT, signature: `0x${"11".repeat(65)}`, declaration: true });
@@ -48,6 +50,7 @@ function setup(over: Partial<ServerDeps> = {}) {
     wrapPriceUsd: "0.05",
     judge: null,
     privyAppId: null,
+    clientHashKey: HASH_KEY,
     getStocks: async () => [],
     devAllowUnknownCountry: false,
     now: () => nowMs,
@@ -55,6 +58,21 @@ function setup(over: Partial<ServerDeps> = {}) {
     ...over,
   };
   return { deps, lines, advance: (ms: number) => (nowMs += ms) };
+}
+
+// The memory store keeps its map private, so the keys it holds are found by asking for the ones a
+// request could have written: the client counters for this minute under either hash.
+async function dumpStore(store: KvStore): Promise<Record<string, string>> {
+  const minute = Math.floor(START / 60_000);
+  const found: Record<string, string> = {};
+  for (const hash of [await hashClientId(HASH_KEY, "203.0.113.7"), `0x${createHash("sha256").update("203.0.113.7").digest("hex")}` as const]) {
+    for (const window of [`get-${minute}`, `post-${minute}`]) {
+      const k = keys.rateLimit("client", hash, window);
+      const v = await store.get(k);
+      if (v !== null) found[k] = v;
+    }
+  }
+  return found;
 }
 
 function request(method: string, path: string, over: Partial<MoiRequest> = {}): MoiRequest {
@@ -330,6 +348,26 @@ describe("route: failures and logs (C19)", () => {
     for (const leak of ["9f9f9f9f", "203.0.113.7", PAYOUT, "declaration", "relayer key"]) expect(line).not.toContain(leak);
   });
 
+  it("tags a refusal and keys its rate limit with a keyed hash of the address, never a plain SHA-256 (C46)", async () => {
+    const plain = createHash("sha256").update("203.0.113.7").digest("hex").slice(0, 8);
+    const tagUnder = async (key: `0x${string}`) => {
+      const { deps, lines } = setup({ clientHashKey: key });
+      await route(deps, request("GET", "/nope"));
+      return (JSON.parse(lines[0] ?? "{}") as { ip: string }).ip;
+    };
+    const tag = await tagUnder(HASH_KEY);
+    expect(tag).toMatch(/^[0-9a-f]{8}$/);
+    expect(tag).not.toBe(plain);
+    expect(tag).toBe(await tagUnder(HASH_KEY));
+    expect(tag).not.toBe(await tagUnder(`0x${"7d".repeat(32)}`));
+    // The counter key holds only the keyed hash of the address.
+    const { deps } = setup();
+    await route(deps, request("GET", "/api/stocks"));
+    const counters = Object.keys(await dumpStore(deps.store));
+    expect(counters.some((k) => k.includes("client-0x"))).toBe(true);
+    expect(counters.some((k) => k.includes(createHash("sha256").update("203.0.113.7").digest("hex")))).toBe(false);
+  });
+
   it("logs every refusal once and nothing for a success", async () => {
     const { deps, lines } = setup();
     await route(deps, post("/api/claim"));
@@ -360,7 +398,7 @@ describe("route: judge gifts (C26)", () => {
     const res = await route(deps, post("/api/judge", '{"a":1}', { region: "07" }));
     expect(res.headers["Cache-Control"]).toBe("no-store");
     expect(vi.mocked(handleJudgeClaim)).toHaveBeenCalledWith(
-      { client: deps.client, vault: VAULT, relayer: deps.relayer, store: deps.store, judgeSeed: judge.seed, pool: judge.pool, privyAppId: "app123", verifyAccessToken },
+      { client: deps.client, vault: VAULT, relayer: deps.relayer, store: deps.store, judgeSeed: judge.seed, pool: judge.pool, privyAppId: "app123", clientHashKey: HASH_KEY, verifyAccessToken },
       { a: 1 },
       { country: "IN", region: "07", clientIp: "203.0.113.7", devAllowUnknownCountry: true },
     );

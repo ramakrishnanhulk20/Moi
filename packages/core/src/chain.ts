@@ -100,7 +100,12 @@ export function rawToShares(raw: bigint, uiMultiplier: bigint | null): bigint {
 
 const verifiedClients = new WeakSet<PublicClient>();
 
-async function assertChain(client: PublicClient): Promise<void> {
+/**
+ * Throws unless `client` reports chain 56. Asked once per client object; a client that answered
+ * 56 is remembered, one that did not is asked again next time. Every reader of money state (gift
+ * records, receipts, balances) goes through this so a node on another chain never feeds it.
+ */
+export async function assertChain(client: PublicClient): Promise<void> {
   if (verifiedClients.has(client)) return;
   const id = await client.getChainId();
   if (id !== CHAIN_ID) throw new Error(`RPC is on chain ${id}, expected ${CHAIN_ID}.`);

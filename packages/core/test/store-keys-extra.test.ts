@@ -16,11 +16,24 @@ describe("store keys added for nonce gaps and b402 wrapping", () => {
     expect(keys.wrapped(vault, 1n)).toBe(`moi:v1:56:${getAddress(vault)}:wrapped:1`);
     expect(() => keys.wrapped(vault, 0n)).toThrow();
   });
-  it("scopes payment nonces to the payee and lowercases them", () => {
+  it("scopes payment nonces to the payee and the payer, and lowercases them", () => {
     const n = `0x${"AB".repeat(32)}`;
-    expect(keys.paymentAuth(payTo, n)).toBe(`moi:v1:56:0x96E854aBDdc5C618ca843956d1303017b586aB75:paymentauth:0x${"ab".repeat(32)}`);
-    expect(() => keys.paymentAuth(payTo, "0x1234")).toThrow(RangeError);
-    expect(() => keys.paymentAuth("0xnotanaddress" as `0x${string}`, n)).toThrow(RangeError);
+    const payer = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8";
+    expect(keys.paymentAuth(payTo, payer, n)).toBe(
+      `moi:v1:56:0x96E854aBDdc5C618ca843956d1303017b586aB75:paymentauth:${getAddress(payer)}-0x${"ab".repeat(32)}`,
+    );
+    expect(keys.paymentAuth(payTo, payer, n)).not.toBe(keys.paymentAuth(payTo, relayer, n));
+    expect(() => keys.paymentAuth(payTo, payer, "0x1234")).toThrow(RangeError);
+    expect(() => keys.paymentAuth("0xnotanaddress" as `0x${string}`, payer, n)).toThrow(RangeError);
+    expect(() => keys.paymentAuth(payTo, "0x1234" as `0x${string}`, n)).toThrow(RangeError);
+  });
+  it("binds one Transfer of one settlement receipt per key, under the payee", () => {
+    const tx = `0x${"CD".repeat(32)}`;
+    expect(keys.settlementUsed(payTo, tx, 3)).toBe(`moi:v1:56:0x96E854aBDdc5C618ca843956d1303017b586aB75:settlement:0x${"cd".repeat(32)}-3`);
+    expect(keys.settlementUsed(payTo, tx, 0)).not.toBe(keys.settlementUsed(payTo, tx, 1));
+    expect(() => keys.settlementUsed(payTo, "0x1234", 0)).toThrow(RangeError);
+    expect(() => keys.settlementUsed(payTo, tx, -1)).toThrow(RangeError);
+    expect(() => keys.settlementUsed(payTo, tx, 1.5)).toThrow(RangeError);
   });
 });
 

@@ -209,13 +209,17 @@ const receiptWith = (logs: unknown[], status = "success", transactionHash = TX) 
 // What the chain shows for a real U settlement: the exact price moved to Ram's wallet.
 const PAID_IN_U = receiptWith([transferLog(asset("U"), PAY_TO, PRICE_UNITS)]);
 
-// null is a receipt the node does not have yet; a function is asked on every read.
-type ReceiptAnswer = unknown | null | (() => unknown);
+// null is a receipt the node does not have yet; a function is asked on every read, with the hash.
+type ReceiptAnswer = unknown | null | ((hash: Hex) => unknown);
 
 // Serves the gift record, a latest block at NOW_S and the settlement receipt. `secondsLeft` is the
-// gift's expiry minus that.
-function fakeClient(state: number = STATE.Open, fails?: Error, secondsLeft = 86_400n, receipt: ReceiptAnswer = PAID_IN_U) {
+// gift's expiry minus that. The node reports chain 56 unless `chainId` says otherwise.
+function fakeClient(state: number = STATE.Open, fails?: Error, secondsLeft = 86_400n, receipt: ReceiptAnswer = PAID_IN_U, chainId = 56) {
   return {
+    getChainId: async () => {
+      if (fails) throw fails;
+      return chainId;
+    },
     readContract: async ({ functionName }: { functionName: string }) => {
       if (fails) throw fails;
       if (functionName !== "getGift") throw new Error(`unexpected read ${functionName}`);
@@ -227,7 +231,7 @@ function fakeClient(state: number = STATE.Open, fails?: Error, secondsLeft = 86_
     },
     getTransactionReceipt: async ({ hash }: { hash: Hex }) => {
       if (fails) throw fails;
-      const answer = typeof receipt === "function" ? (receipt as () => unknown)() : receipt;
+      const answer = typeof receipt === "function" ? (receipt as (hash: Hex) => unknown)(hash) : receipt;
       if (answer === null) throw new TransactionReceiptNotFoundError({ hash });
       if (answer instanceof Error) throw answer;
       return structuredClone(answer);
@@ -496,7 +500,7 @@ describe("handleWrap", () => {
     const u = byMethod(await requirementsOf(api), "U", "eip3009");
     const header = encode(eip3009Payment(u, {}, { resource: resourceFor(5) }));
     expect((await handleWrap(wrapDeps(api, { store }), "5", header)).status).toBe(200);
-    expect(JSON.parse((await store.get(keys.paymentAuth(PAY_TO, NONCE_A))) ?? "")).toMatchObject({ vault: VAULT, giftId: "5" });
+    expect(JSON.parse((await store.get(keys.paymentAuth(PAY_TO, PAYER, NONCE_A))) ?? "")).toMatchObject({ vault: VAULT, giftId: "5" });
 
     // Gift 5 is Open on vault B too: the fake chain answers Open for any vault.
     const onB = await handleWrap(wrapDeps(api, { store, vault: OTHER_VAULT, client: fakeClient(STATE.Open) }), "5", header);
@@ -522,7 +526,7 @@ describe("handleWrap", () => {
     expect(count("/api/v2/b402/verify")).toBe(2);
     expect(count("/api/v2/b402/settle")).toBe(0);
     expect(await isWrapped(deps.store, VAULT, 7n)).toBe(false);
-    expect(await deps.store.get(keys.paymentAuth(PAY_TO, NONCE_A))).toBeNull();
+    expect(await deps.store.get(keys.paymentAuth(PAY_TO, PAYER, NONCE_A))).toBeNull();
     expect(await deps.store.get(keys.wrapped(VAULT, 7n))).toBeNull();
 
     const garbled = b402({ verify: { isValid: "yes" } });
@@ -576,7 +580,7 @@ describe("handleWrap", () => {
     // 25 seconds at 4 seconds: the first call and 6 polls, then it answers.
     expect(count("/api/v2/b402/settle")).toBe(7);
     expect(clock.sleeps.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(25_000);
-    expect(JSON.parse((await deps.store.get(keys.paymentAuth(PAY_TO, NONCE_A))) ?? "").giftId).toBe("7");
+    expect(JSON.parse((await deps.store.get(keys.paymentAuth(PAY_TO, PAYER, NONCE_A))) ?? "").giftId).toBe("7");
     // A second payment for the same gift could double charge while the first may still land.
     expect((await handleWrap(deps, "7", encode(eip3009Payment(u, { nonce: NONCE_B })))).body).toEqual({ ok: false, error: "wrap_in_progress" });
     expect((await handleWrap(deps, "7", null)).body).toEqual({ ok: false, error: "wrap_in_progress" });
@@ -645,7 +649,7 @@ describe("handleWrap", () => {
     expect(await handleWrap(wrapDeps(api, { client: expiring }), "7", null)).toEqual({ status: 409, body: { ok: false, error: "gift_expiring" } });
     const store = createMemoryStore(() => START_MS);
     expect((await handleWrap(wrapDeps(api, { client: expiring, store }), "7", encode(eip3009Payment(u)))).body).toEqual({ ok: false, error: "gift_expiring" });
-    expect(await store.get(keys.paymentAuth(PAY_TO, NONCE_A))).toBeNull();
+    expect(await store.get(keys.paymentAuth(PAY_TO, PAYER, NONCE_A))).toBeNull();
     expect(count("/api/v2/b402/verify")).toBe(0);
     expect((await handleWrap(wrapDeps(api, { client: fakeClient(STATE.Open, undefined, 600n) }), "7", null)).status).toBe(402);
 
@@ -734,6 +738,78 @@ describe("handleWrap", () => {
     expect(await isWrapped(deps.store, VAULT, 7n)).toBe(true);
     expect(later.count("/api/v2/b402/verify")).toBe(1);
     expect(later.count("/api/v2/b402/settle")).toBe(3);
+  });
+
+  it("lets one settlement transaction mark one gift: a facilitator answering an old hash marks nothing, a batched receipt marks one gift per Transfer (C44)", async () => {
+    // One payment per gift, but b402 answers both with the same hash: the second gift must not ride
+    // on the first gift's settlement, whatever the receipt shows.
+    const store = createMemoryStore(() => START_MS);
+    const { api, count } = b402();
+    const u = byMethod(await requirementsOf(api), "U", "eip3009");
+    expect((await handleWrap(wrapDeps(api, { store }), "7", encode(eip3009Payment(u)))).status).toBe(200);
+    const second = eip3009Payment(u, { nonce: NONCE_B }, { resource: resourceFor(8) });
+    const stale = await handleWrap(wrapDeps(api, { store }), "8", encode(second));
+    expect(stale).toEqual({ status: 502, body: { ok: false, error: "settlement_unexpected" } });
+    expect(await isWrapped(store, VAULT, 8n)).toBe(false);
+    expect(count("/api/v2/b402/settle")).toBe(2);
+    // The first gift's record is untouched and still answers idempotently.
+    expect(await handleWrap(wrapDeps(api, { store }), "7", null)).toEqual({ status: 200, body: { ok: true, wrapped: true, txHash: TX } });
+
+    // A receipt holding two exact Transfers is a batch of two settlements: it may mark two gifts,
+    // one per Transfer, and never a third.
+    const batched = receiptWith([transferLog(asset("U"), PAY_TO, PRICE_UNITS), transferLog(asset("U"), PAY_TO, PRICE_UNITS)]);
+    const batchStore = createMemoryStore(() => START_MS);
+    const batch = b402();
+    const batchDeps = () => wrapDeps(batch.api, { store: batchStore, client: fakeClient(STATE.Open, undefined, 86_400n, batched) });
+    const NONCE_C = `0x${"0c".repeat(32)}`;
+    expect((await handleWrap(batchDeps(), "7", encode(eip3009Payment(u)))).status).toBe(200);
+    expect((await handleWrap(batchDeps(), "8", encode(eip3009Payment(u, { nonce: NONCE_B }, { resource: resourceFor(8) })))).status).toBe(200);
+    const third = await handleWrap(batchDeps(), "9", encode(eip3009Payment(u, { nonce: NONCE_C }, { resource: resourceFor(9) })));
+    expect(third).toEqual({ status: 502, body: { ok: false, error: "settlement_unexpected" } });
+    expect(await isWrapped(batchStore, VAULT, 9n)).toBe(false);
+
+    // A replay after the mark write failed still marks: the Transfer is bound to this very gift.
+    let storeDown = true;
+    const inner = createMemoryStore(() => START_MS);
+    const flaky: KvStore = { ...inner, set: async (k, v, ttl) => (storeDown ? Promise.reject(new Error("store down")) : inner.set(k, v, ttl)) };
+    const replayApi = b402();
+    const header = encode(eip3009Payment(u));
+    expect((await handleWrap(wrapDeps(replayApi.api, { store: flaky }), "7", header)).status).toBe(503);
+    storeDown = false;
+    expect(await handleWrap(wrapDeps(replayApi.api, { store: flaky }), "7", header)).toMatchObject({ status: 200, body: { ok: true, txHash: TX } });
+    expect(await isWrapped(flaky, VAULT, 7n)).toBe(true);
+  });
+
+  it("binds a payment nonce per payer, so two senders paying with the same Permit2 nonce both wrap, and one sender cannot reuse theirs", async () => {
+    // Two payments, two settlements: b402 names a different hash for each and the chain shows a
+    // receipt under that hash.
+    const TX2 = `0x${"ef".repeat(32)}`;
+    const { api, count } = b402({ settle: [SETTLED, { ...SETTLED, transaction: TX2 }] });
+    const store = createMemoryStore(() => START_MS);
+    const paidInUsdt = (hash: Hex) => receiptWith([transferLog(asset("USDT"), PAY_TO, PRICE_UNITS)], "success", hash);
+    const client = fakeClient(STATE.Open, undefined, 86_400n, paidInUsdt);
+    const usdt = byMethod(await requirementsOf(api), "USDT", "permit2-exact");
+    // Permit2 nonces are chosen by each wallet, often counting from zero, so two wallets collide.
+    expect((await handleWrap(wrapDeps(api, { store, client }), "7", encode(permit2Payment(usdt, { nonce: "0" })))).status).toBe(200);
+    const other = { ...permit2Payment(usdt, { nonce: "0", from: ATTACKER }), resource: resourceFor(8) };
+    expect((await handleWrap(wrapDeps(api, { store, client }), "8", encode(other))).status).toBe(200);
+    expect(await isWrapped(store, VAULT, 8n)).toBe(true);
+    expect(count("/api/v2/b402/settle")).toBe(2);
+    // The same wallet replaying its own nonce for a third gift is still refused before verify.
+    const replay = { ...permit2Payment(usdt, { nonce: "0" }), resource: resourceFor(9) };
+    expect((await handleWrap(wrapDeps(api, { store, client }), "9", encode(replay))).body).toMatchObject({ error: "payment_reused" });
+    expect(count("/api/v2/b402/verify")).toBe(2);
+  });
+
+  it("refuses to read or mark anything when its node is not on chain 56 (C45)", async () => {
+    const { api, calls } = b402();
+    const wrongChain = fakeClient(STATE.Open, undefined, 86_400n, PAID_IN_U, 97);
+    const deps = wrapDeps(api, { client: wrongChain });
+    expect(await handleWrap(deps, "7", null)).toEqual({ status: 502, body: { ok: false, error: "chain_unavailable" } });
+    const u = byMethod(await requirementsOf(b402().api), "U", "eip3009");
+    expect(await handleWrap(deps, "7", encode(eip3009Payment(u)))).toEqual({ status: 502, body: { ok: false, error: "chain_unavailable" } });
+    expect(calls).toEqual([]);
+    expect(await isWrapped(deps.store, VAULT, 7n)).toBe(false);
   });
 
   it("lets only one of two different payments for one gift reach settle", async () => {

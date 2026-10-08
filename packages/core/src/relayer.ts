@@ -540,6 +540,15 @@ export function createRelayer(opts: {
         // and send its own claim, so a request that no longer holds its own token sends nothing.
         // Checked here, under the send lock, because nothing below can be undone once signed.
         if ((await store.get(lockKey)) !== lockToken) throw new RelayerBusyError();
+        // WHY (C47): the holder before this one may have passed that same check with seconds to
+        // spare and then broadcast while its lock ran out. Its record is written under the send
+        // lock, so it is visible here; a record this request has not already judged replaceable is
+        // the answer for this gift, and nothing new is signed.
+        const written = await readRecord(claimKey, giftId, false);
+        if (written !== null && written.hash !== current?.hash) {
+          await store.incrBy(spentKey, -cost, SPENT_TTL_SECONDS).catch(() => undefined);
+          return { txHash: written.hash, reused: true };
+        }
         // WHY (C39): one read of a load-balanced node can lag behind a claim another instance just
         // sent, and reusing its nonce would replace or jam that claim. The relayer's own counter in
         // the shared store remembers every send; the chain count wins only when it is ahead, which
@@ -566,6 +575,19 @@ export function createRelayer(opts: {
           // The claim is live, so its hash is the answer. A missed write leaves the counter one
           // behind, and the next send still takes the chain's count when that is ahead.
         }
+        try {
+          // WHY the signed bytes (C35): if the node later drops this transaction, the next request
+          // for the gift sends exactly these bytes again instead of signing a second claim.
+          // WHY here, under the send lock (C47): the next holder of the send lock reads this
+          // record before it signs, so a request that took the gift over after this one's lock
+          // ran out answers with this claim instead of broadcasting a second one.
+          const record: ClaimRecord = { hash: txHash, raw, sentAt: now().toISOString(), attempts };
+          await store.set(claimKey, JSON.stringify(record), CLAIM_HASH_TTL_SECONDS);
+          releaseClaimLock = true;
+        } catch {
+          // The claim is on its way. Report it, and let the gift lock expire so a retry cannot
+          // broadcast again before the vault itself shows the gift as claimed.
+        }
       } catch (err) {
         // Before the broadcast nothing was spent, so the reservation goes back. After it, the
         // transaction may be live, so the reservation stays (the cap errs toward spending less).
@@ -573,17 +595,6 @@ export function createRelayer(opts: {
         throw err;
       } finally {
         await releaseQuietly(keys.relayerSendLock(relayer), sendToken);
-      }
-
-      try {
-        // WHY the signed bytes (C35): if the node later drops this transaction, the next request
-        // for the gift sends exactly these bytes again instead of signing a second claim.
-        const record: ClaimRecord = { hash: txHash, raw, sentAt: now().toISOString(), attempts };
-        await store.set(claimKey, JSON.stringify(record), CLAIM_HASH_TTL_SECONDS);
-        releaseClaimLock = true;
-      } catch {
-        // The claim is on its way. Report it, and let the gift lock expire so a retry cannot
-        // broadcast again before the vault itself shows the gift as claimed.
       }
       return { txHash, reused: false };
     } finally {
@@ -615,13 +626,17 @@ export function createRelayer(opts: {
    *    DailyCapReachedError is thrown;
    * 9. under the relayer-wide send lock (30 s, waited for up to 15 s) the gift lock must still hold
    *    this request's own token, else the spend reservation goes back and RelayerBusyError is
-   *    thrown with nothing signed or sent (C41). Then the nonce is the node's
+   *    thrown with nothing signed or sent (C41); and the gift's record is read once more: one that
+   *    another request wrote in between is returned with reused true, the reservation given back
+   *    and nothing signed (C47). Then the nonce is the node's
    *    pending count, or the relayer's stored counter when that is higher (C39). In that case the
    *    stored signed bytes for the nonces in between, at most five, are sent again first, lowest
    *    first ("already known" counts as sent); if any of them is missing, the counter goes back to
    *    the pending count and that is the nonce. The transaction is then signed and sent, its
-   *    signed bytes are stored under its nonce for a day, and the counter is set to nonce plus one;
-   * 10. the record {hash, raw, sentAt, attempts} is stored for 30 days and the gift lock released.
+   *    signed bytes are stored under its nonce for a day, the counter is set to nonce plus one, and
+   *    the record {hash, raw, sentAt, attempts} is stored for 30 days, all before the send lock is
+   *    released;
+   * 10. the gift lock is released.
    * Throws RelayerInputError for bad input, StoreError when the store fails, and the RPC's own
    * error when the node fails. Once a send may have happened, the gift lock is left to expire
    * rather than released, so a failure can never lead straight to a second broadcast.

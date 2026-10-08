@@ -4,7 +4,7 @@ import { bsc } from "viem/chains";
 import { createBscClient, RPC_TIMEOUT_MS } from "./chain.js";
 import { EnvError, loadServerEnv, type ServerEnv } from "./env.js";
 import type { ServerDeps } from "./http.js";
-import { deriveJudgeKey, parseJudgePool } from "./judge.js";
+import { deriveClientHashKey, deriveJudgeKey, parseJudgePool } from "./judge.js";
 import { createRelayer } from "./relayer.js";
 import { createStocksCache } from "./stocks.js";
 import { createMemoryStore, createUpstashStore, type KvStore } from "./store.js";
@@ -92,6 +92,9 @@ async function checkRelayerMatches(client: PublicClient, vault: Address, relayer
  *   parseJudgePool, and then MOI_JUDGE_SEED (0x and 64 hex, not all zeros) and
  *   NEXT_PUBLIC_PRIVY_APP_ID (1 to 64 letters and digits) are required.
  * - devAllowUnknownCountry is true only when MOI_DEV_ALLOW_UNKNOWN_COUNTRY is exactly "1".
+ * - C46: clientHashKey, the key every client address and user id is hashed under, is derived from
+ *   RELAYER_PRIVATE_KEY by HKDF (judge.ts deriveClientHashKey), so every instance of the server
+ *   hashes alike without a second secret to set, and nothing can be undone to the key.
  * - C43: the vault's relayer() read on chain must equal RELAYER_PRIVATE_KEY's address.
  * - The public client (createBscClient, 5 s timeout, or `opts.client`), a Web3 API client for quotes
  *   and stocks (10 s) and a dedicated one for wrap (25 s), the relayer with its own wallet client,
@@ -130,6 +133,7 @@ export async function createServerDeps(
   const client = opts.client ?? createBscClient(env.BSC_RPC_URL);
   const vault = getAddress(env.MOI_VAULT_ADDRESS);
   const account = privateKeyToAccount(env.RELAYER_PRIVATE_KEY);
+  const clientHashKey = await deriveClientHashKey(env.RELAYER_PRIVATE_KEY);
   await checkRelayerMatches(client, vault, account.address);
 
   const relayer = createRelayer({
@@ -159,6 +163,7 @@ export async function createServerDeps(
     wrapPriceUsd: env.MOI_WRAP_PRICE_USD,
     judge,
     privyAppId,
+    clientHashKey,
     getStocks: createStocksCache(),
     devAllowUnknownCountry: source.MOI_DEV_ALLOW_UNKNOWN_COUNTRY === "1",
   };

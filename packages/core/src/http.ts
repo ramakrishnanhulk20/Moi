@@ -1,7 +1,7 @@
-import { bytesToHex, type Address, type PublicClient } from "viem";
+import type { Address, PublicClient } from "viem";
 import { handleClaim } from "./claim.js";
 import { parseGiftId } from "./gift.js";
-import { canonicalClientIp, handleJudgeClaim } from "./judge.js";
+import { canonicalClientIp, handleJudgeClaim, hashClientId } from "./judge.js";
 import type { verifyPrivyAccessToken } from "./privy.js";
 import { handleQuote } from "./quote.js";
 import type { createRelayer } from "./relayer.js";
@@ -47,6 +47,8 @@ export type ServerDeps = {
   /** Null when MOI_JUDGE_POOL is unset, which closes POST /api/judge (503 judge_gifts_closed). */
   judge: { seed: `0x${string}`; pool: Map<bigint, number> } | null;
   privyAppId: string | null;
+  /** The key every client address and user id is hashed under before it is stored or logged (C46). */
+  clientHashKey: `0x${string}`;
   getStocks: (deps: StocksDeps) => Promise<GiftStock[]>;
   devAllowUnknownCountry: boolean;
   verifyAccessToken?: typeof verifyPrivyAccessToken;
@@ -180,10 +182,6 @@ type Answer = { status: number; body: unknown; headers?: Record<string, string> 
 
 const refuse = (status: number, error: string, headers?: Record<string, string>): Answer => ({ status, body: { ok: false, error }, headers });
 
-async function sha256Hex(text: string): Promise<`0x${string}`> {
-  return bytesToHex(new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))));
-}
-
 // A UTF-16 string is never fewer bytes in UTF-8 than it has code units, so an over-long string is
 // refused before anything is encoded.
 function tooLarge(body: string): boolean {
@@ -201,7 +199,7 @@ function parseJson(body: string | null): { ok: true; value: unknown } | { ok: fa
 
 /**
  * C23: fixed one-minute windows, counted in the store before any handler runs. Per client (the
- * SHA-256 of its platform address, or of "unknown") 30 POSTs and 120 GETs a minute, each in its own
+ * keyed hash of its platform address, or of "unknown", C46) 30 POSTs and 120 GETs a minute, each in its own
  * counter; then 600 requests a minute across everyone. A client already over its own limit is
  * refused without touching the global counter, so one noisy caller cannot spend everyone's budget
  * on its own refusals. A store that fails or answers something other than a count refuses (502
@@ -233,7 +231,7 @@ type Seen = { route: RouteName | "unmatched"; ipTag: string };
 
 async function dispatch(deps: ServerDeps, req: MoiRequest, seen: Seen): Promise<Answer> {
   const ip = canonicalClientIp(req.clientIp);
-  const clientHash = await sha256Hex(ip ?? UNKNOWN_CLIENT);
+  const clientHash = await hashClientId(deps.clientHashKey, ip ?? UNKNOWN_CLIENT);
   seen.ipTag = clientHash.slice(2, 10);
 
   const matched = matchRoute(req.path);
@@ -307,6 +305,7 @@ async function dispatch(deps: ServerDeps, req: MoiRequest, seen: Seen): Promise<
           judgeSeed: deps.judge.seed,
           pool: deps.judge.pool,
           privyAppId: deps.privyAppId,
+          clientHashKey: deps.clientHashKey,
           verifyAccessToken: deps.verifyAccessToken,
         },
         parsed.value,
@@ -348,7 +347,7 @@ function logRefusal(deps: ServerDeps, seen: Seen, status: number, error: string 
  * Every response carries the fixed headers of `json`; only a 200 from GET /api/stocks is
  * "public, max-age=30". Anything that throws becomes 500 {ok: false, error: "internal"} (C19).
  * Every status of 400 or more is logged as one JSON line {t, route, status, error, ip}, where ip
- * is eight hex characters of the address hash. Never throws.
+ * is eight hex characters of the keyed address hash (C46). Never throws.
  */
 export async function route(deps: ServerDeps, req: MoiRequest): Promise<MoiResponse> {
   const seen: Seen = { route: "unmatched", ipTag: "none" };

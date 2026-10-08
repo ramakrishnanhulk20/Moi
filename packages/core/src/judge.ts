@@ -63,6 +63,52 @@ export async function deriveJudgeKey(seedHex: `0x${string}`, index: number): Pro
   throw new JudgeConfigError("No usable judge key could be derived.");
 }
 
+const CLIENT_HASH_SALT = new TextEncoder().encode("moi-client-hash-v1");
+const CLIENT_HASH_INFO = new TextEncoder().encode("client-id");
+const MAX_CACHED_HASH_KEYS = 8;
+const hmacKeys = new Map<string, Promise<CryptoKey>>();
+
+/**
+ * The server's client hash key, derived from a 32-byte server secret (the relayer key, in
+ * server-deps.ts) by HKDF-SHA256 with salt "moi-client-hash-v1" and info "client-id" (C46). One
+ * way: the key reveals nothing about the secret, and it never leaves the process. Returns 0x and
+ * 64 lowercase hex. Throws JudgeConfigError, without the secret in the message, when the secret is
+ * not 0x and 64 hex characters, is all zeros, or Web Crypto is missing.
+ */
+export async function deriveClientHashKey(secretHex: `0x${string}`): Promise<`0x${string}`> {
+  if (typeof secretHex !== "string" || !SEED_TEXT.test(secretHex)) throw new JudgeConfigError("The client hash secret must be 0x and 64 hex characters.");
+  const secret = Uint8Array.from(hexToBytes(secretHex));
+  if (secret.every((b) => b === 0)) throw new JudgeConfigError("The client hash secret must not be all zeros.");
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle === undefined) throw new JudgeConfigError("Web Crypto is not available here.");
+  const base = await subtle.importKey("raw", secret, "HKDF", false, ["deriveBits"]);
+  const bits = await subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt: CLIENT_HASH_SALT, info: CLIENT_HASH_INFO }, base, 256);
+  return bytesToHex(new Uint8Array(bits));
+}
+
+/**
+ * The one form in which a client identifier (an address, a Privy user id) is stored or logged:
+ * HMAC-SHA256 of `text` under `keyHex`, as 0x and 64 lowercase hex (C25, C46). WHY keyed: a plain
+ * SHA-256 of an IPv4 address is undone by trying all 2^32 of them, so anyone reading the store or
+ * the logs could name every judge's network; under a key only the server can. Throws
+ * JudgeConfigError for a key that is not 0x and 64 hex characters or when Web Crypto is missing.
+ */
+export async function hashClientId(keyHex: `0x${string}`, text: string): Promise<`0x${string}`> {
+  if (typeof keyHex !== "string" || !SEED_TEXT.test(keyHex)) throw new JudgeConfigError("The client hash key must be 0x and 64 hex characters.");
+  if (typeof text !== "string") throw new TypeError("A client id to hash must be text.");
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle === undefined) throw new JudgeConfigError("Web Crypto is not available here.");
+  const cacheKey = keyHex.toLowerCase();
+  let imported = hmacKeys.get(cacheKey);
+  if (imported === undefined) {
+    if (hmacKeys.size >= MAX_CACHED_HASH_KEYS) hmacKeys.clear();
+    imported = subtle.importKey("raw", Uint8Array.from(hexToBytes(keyHex)), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    hmacKeys.set(cacheKey, imported);
+    imported.catch(() => hmacKeys.delete(cacheKey));
+  }
+  return bytesToHex(new Uint8Array(await subtle.sign("HMAC", await imported, new TextEncoder().encode(text))));
+}
+
 const POOL_ENTRY_TEXT = /^([0-9]{1,78}):(0|[1-9][0-9]?)$/;
 // 64 entries of a 78-digit id, a colon, two digits and a comma.
 const MAX_POOL_TEXT = 64 * 82;
@@ -267,10 +313,6 @@ export function canonicalClientIp(raw: unknown): string | null {
   }
 }
 
-async function sha256Hex(text: string): Promise<string> {
-  return bytesToHex(new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))));
-}
-
 // The verifier's answer is read like input (standard 3): a custom verifier, or a future change to
 // privy.ts, must still hand back a user id the signed message can hold.
 function checkedUserId(value: unknown): string {
@@ -304,6 +346,8 @@ type JudgeDeps = {
   judgeSeed: `0x${string}`;
   pool: Map<bigint, number>;
   privyAppId: string;
+  /** The server's key for hashClientId (C46), from deriveClientHashKey. */
+  clientHashKey: `0x${string}`;
   verifyAccessToken?: typeof verifyPrivyAccessToken;
   now?: () => Date;
 };
@@ -330,8 +374,8 @@ type JudgeCtx = { country?: string | null; region?: string | null; clientIp: str
  *    judge reusing a proof; the per-user mark in step 4 stops the same judge reusing it;
  * 4. the client address in one canonical form (403 unknown_network, before any store write), then
  *    one gift per Privy user for 30 days (409 already_claimed) and one per network per UTC day
- *    (429 too_many_from_network, the user's mark released first). Only SHA-256 hashes of the user
- *    id and the address are stored (C25);
+ *    (429 too_many_from_network, the user's mark released first). Only keyed hashes (hashClientId
+ *    under `clientHashKey`) of the user id and the address are stored (C25, C46);
  * 5. pool gifts in ascending id order, each taken atomically for 90 days so no two judges ever
  *    get the same one; a taken gift that is not Open, has under 10 minutes left by the latest
  *    block, or whose stored claim key is not its pool index's key stays taken and is skipped.
@@ -412,7 +456,7 @@ async function judgeClaim(deps: JudgeDeps, body: unknown, ctx: JudgeCtx): Promis
   const ip = canonicalClientIp(ctx?.clientIp);
   if (ip === null) return fail("unknown_network");
   const day = now().toISOString().slice(0, 10);
-  const [userHash, ipHash] = await Promise.all([sha256Hex(userId), sha256Hex(ip)]);
+  const [userHash, ipHash] = await Promise.all([hashClientId(deps.clientHashKey, userId), hashClientId(deps.clientHashKey, ip)]);
   const userKey = keys.judgeUser(vault, userHash);
   const ipKey = keys.judgeIpDay(vault, ipHash, day);
   const mark = globalThis.crypto.randomUUID();

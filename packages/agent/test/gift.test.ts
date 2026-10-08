@@ -80,9 +80,26 @@ function requirements(change: (accepts: Accept[]) => void = () => {}) {
   return { x402Version: 2, resource: { url: `${ORIGIN}/api/wrap/${GIFT_ID}` }, accepts };
 }
 
-/** baw with every command the gift flow uses; x402 options list Permit2 tokens first on purpose. */
-function wallet(events: string[], replies: Record<string, unknown> = {}) {
-  const previews = new Map<string, string>();
+/**
+ * baw with every command the gift flow uses; x402 options list Permit2 tokens first on purpose.
+ * Every contract-call execute records the calldata it previewed under the hash it reports in
+ * `sentInputs`, which the fake chain serves as the mined transaction's input.
+ */
+function wallet(events: string[], replies: Record<string, unknown> = {}, sentInputs: Record<string, string> = {}) {
+  const previews = new Map<string, { to: string; inputData: string }>();
+  const executeDefault = (args: string[]) => {
+    const to = previews.get(flag(args, "--requestId"))?.to;
+    return { orderId: "order-1", status: "BROADCASTED", txHash: to === NVDAB.toLowerCase() ? APPROVE_HASH : CREATE_HASH, message: null };
+  };
+  const executeOverride = replies["contract-call execute"];
+  const execute = (args: string[]) => {
+    const reply =
+      executeOverride === undefined ? executeDefault(args) : typeof executeOverride === "function" ? (executeOverride as (a: string[]) => unknown)(args) : structuredClone(executeOverride);
+    const preview = previews.get(flag(args, "--requestId"));
+    const hash = (reply as { txHash?: unknown } | null)?.txHash;
+    if (typeof hash === "string" && preview !== undefined) sentInputs[hash.toLowerCase()] = preview.inputData;
+    return reply;
+  };
   const fake = fakeBaw({
     "wallet status": STATUS_CONNECTED,
     "wallet address": ADDRESSES,
@@ -98,7 +115,7 @@ function wallet(events: string[], replies: Record<string, unknown> = {}) {
     },
     "contract-call preview": (args: string[]) => {
       const requestId = `req-${previews.size + 1}`;
-      previews.set(requestId, flag(args, "--to"));
+      previews.set(requestId, { to: flag(args, "--to"), inputData: flag(args, "--inputData") });
       return {
         requestId,
         parsedTx: { transactionType: "ContractCall", contractAddress: flag(args, "--to") },
@@ -108,10 +125,6 @@ function wallet(events: string[], replies: Record<string, unknown> = {}) {
         requireConfirmation: false,
         expiresAt: 1_800_000_600_000,
       };
-    },
-    "contract-call execute": (args: string[]) => {
-      const to = previews.get(flag(args, "--requestId"));
-      return { orderId: "order-1", status: "BROADCASTED", txHash: to === NVDAB.toLowerCase() ? APPROVE_HASH : CREATE_HASH, message: null };
     },
     "x402-payment preview": (args: string[]) => {
       const required = JSON.parse(Buffer.from(flag(args, "--paymentRequirements"), "base64").toString("utf8")) as ReturnType<typeof requirements>;
@@ -143,6 +156,7 @@ function wallet(events: string[], replies: Record<string, unknown> = {}) {
     },
     "x402-payment sign": { paymentHeaderName: "PAYMENT-SIGNATURE", paymentHeaderValue: "eyJ4NDAyVmVyc2lvbiI6Mn0=", approveTxHash: null, binanceChainId: null, signatureExpiresAt: 1_800_000_600 },
     ...replies,
+    "contract-call execute": execute,
   });
   const runner: typeof fake.runner = async (args) => {
     events.push(`baw ${args[0]} ${args[1]}`);
@@ -151,7 +165,19 @@ function wallet(events: string[], replies: Record<string, unknown> = {}) {
   return { runner, calls: fake.calls };
 }
 
-type ChainOpts = { balances?: bigint[]; createFails?: () => never; giftState?: number; uiMultiplier?: bigint; claimKeyUsed?: boolean };
+type ChainOpts = {
+  balances?: bigint[];
+  createFails?: () => never;
+  giftState?: number;
+  uiMultiplier?: bigint;
+  claimKeyUsed?: boolean;
+  /** What the chain shows as each mined transaction's calldata; the wallet fake fills it. */
+  sentInputs?: Record<string, string>;
+  /** Calldata the chain shows for a hash instead of what was previewed, as a swapped transaction would. */
+  minedInputs?: Record<string, string>;
+  /** The claim key the vault stores for the created gift instead of the one the agent made. */
+  storedClaimKey?: Address;
+};
 
 function chain(opts: ChainOpts = {}): PublicClient {
   const balances = opts.balances ?? [0n, BOUGHT];
@@ -181,10 +207,16 @@ function chain(opts: ChainOpts = {}): PublicClient {
       }
       if (functionName === "balanceOf") return balances[Math.min(reads++, balances.length - 1)];
       if (functionName === "getGift") {
-        const claimKey = args?.[0] === GIFT_ID && captured.key !== undefined ? captured.key.address : TSLAB;
+        const own = args?.[0] === GIFT_ID && captured.key !== undefined ? captured.key.address : TSLAB;
+        const claimKey = args?.[0] === GIFT_ID && opts.storedClaimKey !== undefined ? opts.storedClaimKey : own;
         return { token: NVDAB, sender: OWNER, claimKey, expiry: NOW + 86_400n, state: opts.giftState ?? 1, amount: BOUGHT, sealedNote: "0x" };
       }
       throw new Error(`unexpected read ${functionName}`);
+    },
+    getTransaction: async ({ hash }: { hash: Hex }) => {
+      const input = opts.minedInputs?.[hash.toLowerCase()] ?? opts.sentInputs?.[hash.toLowerCase()];
+      if (input === undefined) throw new Error("unknown transaction");
+      return { hash, input, from: OWNER.toLowerCase(), to: hash === APPROVE_HASH ? NVDAB.toLowerCase() : VAULT.toLowerCase() };
     },
     waitForTransactionReceipt: async ({ hash }: { hash: Hex }) => {
       if (hash === CREATE_HASH && opts.createFails) opts.createFails();
@@ -228,14 +260,15 @@ type SetupOpts = ChainOpts & {
 
 function setup(opts: SetupOpts = {}) {
   const events: string[] = [];
-  const baw = wallet(events, opts.replies);
+  const sentInputs: Record<string, string> = {};
+  const baw = wallet(events, opts.replies, sentInputs);
   const srv = server(events, opts.required, opts.paid);
   const lines: string[] = [];
   const questions: string[] = [];
   const answers = [...(opts.confirms ?? [])];
   const deps: GiftDeps = {
     baw: baw.runner,
-    client: chain(opts),
+    client: chain({ ...opts, sentInputs }),
     pinned,
     fetchImpl: srv.fetchImpl,
     linkDir: opts.linkDir ?? path.join(mkdtempSync(path.join(tmpdir(), "moi-agent-")), "gifts"),
@@ -350,6 +383,33 @@ describe("sendGift", () => {
       [create.to.toLowerCase(), create.data],
     ]);
     expect(t.events.indexOf("fetch")).toBeGreaterThan(t.events.lastIndexOf("baw contract-call execute"));
+  });
+
+  it("stops when the mined approval's calldata is not the approval it built, before createGift is ever previewed (C48)", async () => {
+    // What the chain shows for the approval hash: an approval of the same amount to a stranger.
+    const stranger = getAddress("0x4444444444444444444444444444444444444444");
+    const swapped = buildApproveVaultTx({ token: NVDAB, amount: BOUGHT, vault: stranger }).data;
+    const t = setup({ minedInputs: { [APPROVE_HASH]: swapped } });
+    const err = await sendGift(t.deps, INPUT).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GiftError);
+    expect((err as Error).message).toMatch(/Transaction 0xa1a1.* is not the one Moi asked Binance to send/);
+    expect(commands(t.calls).filter((c) => c === "contract-call preview")).toHaveLength(1);
+    expect(t.events).not.toContain("fetch");
+  });
+
+  it("saves no link when the vault stored the gift under a claim key Moi did not make, keeps the key file, and says the sender can take the gift back (C48)", async () => {
+    const t = setup({ storedClaimKey: TSLAB });
+    const err = await sendGift(t.deps, INPUT).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GiftError);
+    const key = captured.key!;
+    const pendingFile = path.join(t.deps.linkDir, `pending-${key.address.toLowerCase()}.txt`);
+    expect((err as Error).message).toMatch(/Gift 7 was made, but the vault's record of it is not the gift Moi asked for/);
+    expect((err as Error).message).toContain(pendingFile);
+    expect((err as Error).message).toMatch(/take the gift back after it expires/);
+    expect(existsSync(pendingFile)).toBe(true);
+    expect(existsSync(path.join(t.deps.linkDir, "gift-7.txt"))).toBe(false);
+    expect(t.events).not.toContain("fetch");
+    expect((err as Error).message.toLowerCase()).not.toContain(key.privateKey.slice(2));
   });
 
   it.each<[string, (accepts: Accept[]) => void]>([

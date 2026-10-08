@@ -11,6 +11,7 @@ import {
 } from "viem";
 import { z } from "zod";
 import { parseAmount } from "./amounts.js";
+import { assertChain } from "./chain.js";
 import { parseGiftId } from "./gift.js";
 import { keys, type KvStore, type StoreKey } from "./store.js";
 import { readGift } from "./vault.js";
@@ -274,6 +275,9 @@ const DAY_SECONDS = 86_400;
 // is already past its own deadline.
 const PAYMENT_NONCE_TTL_SECONDS = 30 * DAY_SECONDS;
 const MAX_AUTHORIZATION_SECONDS = DAY_SECONDS;
+// A settlement receipt stays on chain for good, so the Transfer that marked a gift stays marked for
+// as long as the store allows (ten years), not just as long as a payment can be replayed.
+const SETTLEMENT_USED_TTL_SECONDS = 10 * 365 * DAY_SECONDS;
 // b402 keeps reconciling a broadcast settlement for about 30 minutes. Holding the gift for that long
 // after an unfinished settlement stops a second payment for the same gift while the first may land.
 const WRAP_LOCK_TTL_SECONDS = 30 * 60;
@@ -368,6 +372,13 @@ const bindingSchema = z.strictObject({
   giftId: z.string().regex(/^[1-9][0-9]{0,77}$/),
   payment: z.string().regex(HEX32_TEXT),
   mark: z.uuid(),
+});
+
+// What keys.settlementUsed holds: the one gift a Transfer inside a settlement receipt paid for
+// (C44). Never released: the receipt is permanent, so the mark is too.
+const settlementBindingSchema = z.strictObject({
+  vault: z.string().refine((a) => isAddress(a) && getAddress(a) === a),
+  giftId: z.string().regex(/^[1-9][0-9]{0,77}$/),
 });
 
 type WrapState =
@@ -526,40 +537,46 @@ function classifySettle(data: unknown, requirement: PaymentRequirementsV2): Sett
   return s.transaction === "" ? { kind: "failed" } : { kind: "pending" };
 }
 
-type OnChain = "paid" | "pending" | "unexpected";
+type OnChain = { kind: "pending" } | { kind: "unexpected" } | { kind: "paid"; positions: number[] };
 
 /**
  * C42: what the chain itself says about a settlement b402 reported. "paid" only when the node has a
- * receipt for exactly `txHash`, it succeeded, and it holds a standard ERC-20 Transfer emitted by the
- * requirement's asset to the requirement's payee for exactly the requirement's amount. "pending" when
- * the node has no receipt yet. "unexpected" for any other receipt. Throws when the node itself fails,
- * so a caller can tell "not yet" from "cannot tell".
- * Covers a hash that b402 got wrong or that is not this payment's kind of transfer. Does not tie the
- * Transfer to this payer or this nonce: a receipt that pays Ram's wallet the exact price in the same
- * asset for another reason would also count.
+ * receipt for exactly `txHash`, it succeeded, and it holds at least one standard ERC-20 Transfer
+ * emitted by the requirement's asset to the requirement's payee for exactly the requirement's
+ * amount; `positions` are those Transfers' places in the receipt's log list, the ones from `payer`
+ * first. "pending" when the node has no receipt yet. "unexpected" for any other receipt. Throws when
+ * the node itself fails, so a caller can tell "not yet" from "cannot tell".
+ * Covers a hash that b402 got wrong or that is not this payment's kind of transfer. Does not refuse
+ * a Transfer from another address, because no live b402 settlement has yet shown whether the
+ * facilitator moves the fee straight from the payer; the caller binds each Transfer to one gift
+ * instead (C44), so a receipt can never pay for more gifts than it holds Transfers.
  */
-async function settlementOnChain(client: PublicClient, txHash: Hex, requirement: PaymentRequirementsV2): Promise<OnChain> {
+async function settlementOnChain(client: PublicClient, txHash: Hex, requirement: PaymentRequirementsV2, payer: Address): Promise<OnChain> {
   let receipt: Awaited<ReturnType<PublicClient["getTransactionReceipt"]>>;
   try {
     receipt = await client.getTransactionReceipt({ hash: txHash });
   } catch (err) {
-    if (err instanceof TransactionReceiptNotFoundError) return "pending";
+    if (err instanceof TransactionReceiptNotFoundError) return { kind: "pending" };
     throw err;
   }
-  if (receipt.status !== "success" || typeof receipt.transactionHash !== "string" || receipt.transactionHash.toLowerCase() !== txHash) return "unexpected";
+  if (receipt.status !== "success" || typeof receipt.transactionHash !== "string" || receipt.transactionHash.toLowerCase() !== txHash) return { kind: "unexpected" };
   const amount = BigInt(requirement.amount);
-  for (const log of receipt.logs) {
-    if (!isAddress(log.address, { strict: false }) || getAddress(log.address) !== requirement.asset) continue;
+  const fromPayer: number[] = [];
+  const fromOthers: number[] = [];
+  receipt.logs.forEach((log, position) => {
+    if (!isAddress(log.address, { strict: false }) || getAddress(log.address) !== requirement.asset) return;
     try {
       // The library's ERC-20 ABI, decoded strictly, so an NFT Transfer (same topic, the id indexed)
       // or any other event the asset emits never reads as a payment.
       const event = decodeEventLog({ abi: erc20Abi, eventName: "Transfer", topics: log.topics, data: log.data, strict: true });
-      if (getAddress(event.args.to) === requirement.payTo && event.args.value === amount) return "paid";
+      if (getAddress(event.args.to) !== requirement.payTo || event.args.value !== amount) return;
+      (getAddress(event.args.from) === payer ? fromPayer : fromOthers).push(position);
     } catch {
       // Another event from the asset, such as Approval or AuthorizationUsed; keep looking.
     }
-  }
-  return "unexpected";
+  });
+  const positions = [...fromPayer, ...fromOthers];
+  return positions.length === 0 ? { kind: "unexpected" } : { kind: "paid", positions };
 }
 
 type Clock = { now: () => number; sleep: (ms: number) => Promise<void> };
@@ -635,25 +652,29 @@ export type WrapDeps = {
  * 4. the header decoded once (8 KB cap) and parsed once; its accepted requirement must equal one
  *    built here and its signed authorization must pay exactly that amount of that asset to the
  *    payee, or 402 again with an error code;
- * 5. its nonce bound under keys.paymentAuth(payTo, nonce) for 30 days to this vault, this gift and
- *    a hash of this exact payment (C42). A nonce bound to another vault, another gift or another
- *    payment is refused (402 payment_reused). The same payment for the same gift on the same vault
- *    is a replay and resumes at step 6's
+ * 5. its nonce bound under keys.paymentAuth(payTo, payer, nonce) for 30 days to this vault, this
+ *    gift and a hash of this exact payment (C42). A nonce bound to another vault, another gift or
+ *    another payment is refused (402 payment_reused); another payer's equal nonce is another mark.
+ *    The same payment for the same gift on the same vault is a replay and resumes at step 6's
  *    settle, skipping verify (b402 documents settle as idempotent). A new payment is refused with
  *    409 gift_expiring as in step 3. The gift is held so a second payment cannot run beside this one;
  * 6. a new payment goes to b402 verify: not valid gives 402 payment_invalid with both marks
  *    released. Then b402 settle, polled every 4 seconds within `settleBudgetMs` (25 s by default).
  *    Only success with a transaction hash, on eip155:56, for this amount, can mark the gift (C24),
  *    and only once the chain's own receipt for that hash succeeded and holds an ERC-20 Transfer of
- *    exactly this amount of this asset to the payee (C42). No receipt yet gives the 202 below; any
- *    other receipt gives 502 settlement_unexpected and a node failure 502 chain_unavailable, both
- *    marking nothing and keeping gift and payment held for a replay. A
+ *    exactly this amount of this asset to the payee (C42) that no other gift has used: each such
+ *    Transfer is bound under keys.settlementUsed(payTo, hash, position) to one gift, for good, so a
+ *    facilitator answering an old hash marks nothing and a batched receipt marks one gift per
+ *    Transfer (C44). No receipt yet gives the 202 below; any other receipt, or one whose Transfers
+ *    all belong to other gifts, gives 502 settlement_unexpected and a node failure 502
+ *    chain_unavailable, both marking nothing and keeping gift and payment held for a replay. A
  *    settlement that never broadcast gives 402 payment_failed. One still pending when the budget
  *    ends gives 202 {ok: false, error: "settlement_pending", retryAfterSeconds: 5} with a
  *    Retry-After header and marks nothing; replaying the same payment resumes it. A store failure
- *    while marking a settled payment gives 503 store_unavailable with the same retry fields, and a
- *    replay marks it;
+ *    while binding the Transfer or marking a settled payment gives 503 store_unavailable with the
+ *    same retry fields, and a replay marks it;
  * 7. 200 {ok: true, wrapped: true, txHash} with the x402 v2 PAYMENT-RESPONSE header.
+ * The node must report chain 56 before anything is read from it (C45; else 502 chain_unavailable).
  * Every b402 call goes through `api`, the fixed-path Web3 API client (C20). Never throws, and no
  * b402, chain or store text reaches a response (C19).
  */
@@ -695,6 +716,9 @@ async function wrap(deps: WrapDeps, giftIdText: string, paymentHeader: string | 
 
   let expiry: bigint;
   try {
+    // WHY (C45): a node on another chain could hand back a gift record or a settlement receipt
+    // that means nothing here, so nothing is read from it until it has said it serves chain 56.
+    await assertChain(deps.client);
     const gift = await readGift(deps.client, vault, giftId);
     if (gift.state === "None") return fail("gift_not_found");
     if (gift.state !== "Open") return fail("gift_not_open");
@@ -747,7 +771,7 @@ async function wrap(deps: WrapDeps, giftIdText: string, paymentHeader: string | 
   const { requirement } = matched;
   const paymentHash = await sha256Hex(JSON.stringify(payment));
 
-  const nonceKey = keys.paymentAuth(payTo, matched.nonceHex);
+  const nonceKey = keys.paymentAuth(payTo, matched.payer, matched.nonceHex);
   const binding = JSON.stringify({ vault, giftId: giftId.toString(), payment: paymentHash, mark: globalThis.crypto.randomUUID() });
   let resuming: boolean;
   try {
@@ -822,12 +846,37 @@ async function wrap(deps: WrapDeps, giftIdText: string, paymentHeader: string | 
   // of the same header resumes here.
   let onChain: OnChain;
   try {
-    onChain = await settlementOnChain(deps.client, outcome.txHash, requirement);
+    onChain = await settlementOnChain(deps.client, outcome.txHash, requirement, matched.payer);
   } catch {
     return fail("chain_unavailable");
   }
-  if (onChain === "pending") return retryLater("settlement_pending", STATUS.settlement_pending);
-  if (onChain === "unexpected") return fail("settlement_unexpected");
+  if (onChain.kind === "pending") return retryLater("settlement_pending", STATUS.settlement_pending);
+  if (onChain.kind === "unexpected") return fail("settlement_unexpected");
+
+  // WHY (C44): the receipt check above would pass again for any later gift handed the same hash,
+  // and b402 is the only party that names the hash. Each exact Transfer in the receipt is bound to
+  // the first gift that claims it, for good; this gift takes the first free one, or the one already
+  // bound to it on a replay, and a receipt with none left marks nothing.
+  const settlementBinding = JSON.stringify({ vault, giftId: giftId.toString() });
+  let bound = false;
+  try {
+    for (const position of onChain.positions) {
+      const usedKey = keys.settlementUsed(payTo, outcome.txHash, position);
+      if (await deps.store.setNx(usedKey, settlementBinding, SETTLEMENT_USED_TTL_SECONDS)) {
+        bound = true;
+        break;
+      }
+      const holder = settlementBindingSchema.safeParse(parseStored((await deps.store.get(usedKey)) ?? ""));
+      if (holder.success && holder.data.vault === vault && holder.data.giftId === giftId.toString()) {
+        bound = true;
+        break;
+      }
+    }
+  } catch {
+    // The payment has settled; the mark it paid for must not be lost to a short store outage.
+    return retryLater("store_unavailable", 503);
+  }
+  if (!bound) return fail("settlement_unexpected");
 
   const record: WrapRecord = {
     txHash: outcome.txHash,

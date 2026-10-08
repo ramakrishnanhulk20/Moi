@@ -9,7 +9,7 @@ import {
   type UnsignedTx,
 } from "@moi/core/src/create.js";
 import { buildLink, MAX_NOTE_PLAINTEXT_BYTES, newClaimKey, sealNote, signKeyProof } from "@moi/core/src/gift.js";
-import { readListedTokens } from "@moi/core/src/vault.js";
+import { readGift, readListedTokens } from "@moi/core/src/vault.js";
 import { formatUnits, getAddress, type Address, type Hex, type PublicClient, type TransactionReceipt } from "viem";
 import { z } from "zod";
 import type { BawRunner } from "./baw.js";
@@ -125,9 +125,10 @@ type CallTexts = {
 
 /**
  * Previews `tx` through Binance's contract-call, shows the result, asks, executes and waits for a
- * successful receipt from the sender's wallet to `tx.to`. The calldata is always built in this
- * process by create.ts; nothing from a server reaches here (C27). Throws HeldInApp with
- * `texts.waiting()` when the Binance App holds the transaction, and sends nothing after that.
+ * successful receipt from the sender's wallet to `tx.to` whose mined calldata is exactly `tx.data`
+ * (C48). The calldata is always built in this process by create.ts; nothing from a server reaches
+ * here (C27). Throws HeldInApp with `texts.waiting()` when the Binance App holds the transaction,
+ * and sends nothing after that.
  */
 async function contractCall(
   deps: GiftDeps,
@@ -161,7 +162,12 @@ async function contractCall(
   const hash = executed.data.txHash.toLowerCase() as Hex;
   const receipt = await deps.client.waitForTransactionReceipt({ hash, timeout: RECEIPT_TIMEOUT_MS });
   if (receipt.status !== "success") throw new TxFailed(`Transaction ${hash} failed on chain. ${stopped}`);
-  if (!sameAddress(receipt.from, wallet) || receipt.to === null || !sameAddress(receipt.to, getAddress(tx.to))) {
+  // WHY (C48): the wallet is Binance's, not this process's, so the only proof that it signed what
+  // was previewed is the chain's own copy of the transaction: same sender, same target, and the
+  // very bytes create.ts built. A receipt alone says nothing about the calldata.
+  const mined = await deps.client.getTransaction({ hash });
+  const sameCall = typeof mined.input === "string" && mined.input.toLowerCase() === tx.data.toLowerCase();
+  if (!sameCall || !sameAddress(receipt.from, wallet) || receipt.to === null || !sameAddress(receipt.to, getAddress(tx.to))) {
     throw new GiftError(`Transaction ${hash} is not the one Moi asked Binance to send, so Moi stopped. ${stopped}`);
   }
   return { hash, receipt };
@@ -352,6 +358,16 @@ export async function sendGift(deps: GiftDeps, input: GiftInput): Promise<GiftRe
       throw err;
     }
     const giftId = readGiftIdFromReceipt(created.receipt, pinned.vault);
+    // WHY (C48): the link is only worth sending if the vault really holds this stock under this
+    // key. Read back from the vault, not from the receipt, before any link exists. The pending
+    // key file stays, so nothing about the gift is lost while the sender looks into it.
+    const stored = await readGift(client, pinned.vault, giftId);
+    if (stored.state !== "Open" || getAddress(stored.claimKey) !== key.address || stored.token !== stock.address) {
+      throw new GiftError(
+        `Gift ${giftId} was made, but the vault's record of it is not the gift Moi asked for, so Moi saved no link. ` +
+          `${pending.file === null ? "" : `The gift key is kept in ${pending.file}. `}As the sender, you can take the gift back after it expires.`,
+      );
+    }
 
     const link = buildLink(pinned.linkOrigin, giftId, key.privateKey);
     const linkFile = await saveNewLink(deps.linkDir, giftId, `${unwrappedMarker(giftId)}\n${link}\n`);
