@@ -1,0 +1,93 @@
+No files changed, compilation skipped
+
+Ran 19 tests for test/attacks/LiveVaultAttacks.t.sol:LiveVaultAttacksTest
+[PASS] test_attack_C10_brokenTokenCannotTouchNvdabGifts() (gas: 1080343)
+Logs:
+  C10 TSLAB paused and every call to it reverting: NVDAB claim and live refund still pay; TSLAB gift REFUSED
+
+[PASS] test_attack_C1_claimAgainOnGiftsAlreadyClaimedOnMainnet() (gas: 163383)
+Logs:
+  fork of BSC block 126415011, live vault 0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C, 10 gifts made
+  C1 claim live gifts 1 and 2 again through the real relayer: REFUSED GiftNotOpen
+
+[PASS] test_attack_C1_refundAfterClaimAndSecondPayoutAfterRefund() (gas: 610265)
+Logs:
+  C1 refund live gift 1 after its expiry, though it was claimed: REFUSED GiftNotOpen
+  C1 refund then refund again and claim a live gift: REFUSED GiftNotOpen, paid once to its sender
+
+[PASS] test_attack_C28_expiryBeyondNinetyDaysReverts() (gas: 381531)
+Logs:
+  C28 createGift on the live vault 90 days and one second out: REFUSED ExpiryOutOfRange (90 days exactly is accepted)
+
+[PASS] test_attack_C2_validSignatureMovedToAnotherRecipientGiftVaultOrChain() (gas: 1081261)
+Logs:
+  C2 a real claim signature moved to another recipient, gift, vault or chain: REFUSED BadSigner
+  C2 the same signature malleated to high s: REFUSED ECDSAInvalidSignatureS
+
+[PASS] test_attack_C2_wrongKeyAndMalformedSignaturesOnRealOpenGifts() (gas: 1120692)
+Logs:
+  C2 claim each open live gift with a key that is not its own: REFUSED BadSigner on 8 gifts
+  C2 claim a live gift with 65 zero bytes, no bytes, 64 and 66 bytes: REFUSED ECDSAInvalidSignature and ECDSAInvalidSignatureLength
+
+[PASS] test_attack_C31_nonRelayerCannotClaimEvenWithValidSignature() (gas: 1314170)
+Logs:
+  C31 claim from the owner, sender, friend, link holder and others, with a valid signature: REFUSED NotRelayer
+  gas: claim on the live vault through the real relayer, cold, about 144500
+
+[PASS] test_attack_C32_copiedKeyProofFromAnotherAddressReverts() (gas: 632952)
+Logs:
+  C32 a pending createGift copied and sent from another address, and a proof for another sender: REFUSED BadKeyProof
+  gas: createGift on the live vault, empty note, cold, about 232646
+
+[PASS] test_attack_C3_createGiftBreakingEachRuleReverts() (gas: 471097)
+Logs:
+  C3 createGift with a zero key, live gift 1's key, zero amount, USDT, a too-short or millisecond expiry, a 513-byte note:
+  C3   REFUSED ZeroClaimKey, ClaimKeyAlreadyUsed, ZeroAmount, TokenNotListed, ExpiryOutOfRange x2, NoteTooLong
+
+[PASS] test_attack_C4_liabilitiesEqualOpenGiftsAndDonationsAddNone() (gas: 3030279)
+Logs:
+  C4 live liabilities equal the open gifts and balances cover them for all 9 listed tokens
+  C4 a stray NVDAB donation to the live vault: REFUSED as debt, liabilities unchanged; next gift records what arrived
+
+[PASS] test_attack_C5_ownerUsesEveryPowerAndMovesNoGift() (gas: 1187634)
+Logs:
+  C5 live owner pauses, delists, rescues, claims, makes itself relayer and claims, refunds early:
+  C5   REFUSED NothingToRescue, NotRelayer, BadSigner, GiftNotExpired; every open gift still Open
+
+[PASS] test_attack_C5_pauseAndDelistNeverBlockRefundsOrExistingClaims() (gas: 1110345)
+Logs:
+  C5 live owner delists NVDAB then pauses: a claim and an expired live gift's refund still pay out
+
+[PASS] test_attack_C5_renounceOwnershipReverts() (gas: 28115)
+Logs:
+  C5 renounceOwnership by the live owner and by a stranger: REFUSED RenounceDisabled
+
+[PASS] test_attack_C5_rescueSurplusNeverReachesGiftBalances() (gas: 1146024)
+Logs:
+  C5 live owner rescues every listed token with no stray balance: REFUSED NothingToRescue
+  C5 rescue after a stray donation: takes exactly the donation, then REFUSED NothingToRescue at the gifts
+
+[PASS] test_attack_C5_upgradeCallsFailAndNoProxySlotsAreSet() (gas: 59111)
+Logs:
+  C5 live owner calls upgradeToAndCall and upgradeTo: REFUSED, no such functions and no proxy slots
+
+[PASS] test_attack_C6_issuerPauseRevertsClaimAndRefundAndGiftsStayOpen() (gas: 1314257)
+Logs:
+  C6 Binance pauses NVDAB: claim and a live gift's refund REFUSED TokenPaused, gifts stay Open, both pay after unpause
+
+[PASS] test_attack_C7_issuerBlockedSenderCannotExitThroughClaim() (gas: 1129319)
+Logs:
+  C7 Binance blocklists the sender, who claims its own gift to a fresh wallet: REFUSED SenderNotCompliant
+
+[PASS] test_attack_C8_expiryBoundaryAndDeadEndRecipients() (gas: 933838)
+Logs:
+  C8 refund a live gift now and one second before expiry, by its sender and a stranger: REFUSED GiftNotExpired
+  C8 claim to the zero address and to the vault: REFUSED BadRecipient; claim at expiry: REFUSED GiftExpired
+
+[PASS] test_attack_C9_everyLiveNoteIsSealedCiphertext() (gas: 294238)
+Logs:
+  C9 read every live note straight from the chain: 10 sealed blobs, no plain text
+
+Suite result: ok. 19 passed; 0 failed; 0 skipped; finished in 21.03s (140.47s CPU time)
+
+Ran 1 test suite in 22.58s (21.03s CPU time): 19 tests passed, 0 failed, 0 skipped (19 total tests)

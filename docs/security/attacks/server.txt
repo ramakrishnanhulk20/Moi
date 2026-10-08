@@ -1,0 +1,47 @@
+
+> @moi/core@0.0.0 attacks
+> tsx scripts/attacks/run.ts
+
+# Moi server attacks through route(): anvil fork of BSC block 126419208, fresh vault 0xf0b87cE80aBcCC67C1a887D4D8252070AB7e76bb, in-process memory store
+C36 claim signed by a key that is not the gift's: REFUSED 400 bad_signature, no claim lock taken, relayer sent nothing
+C16 valid claim to a contract recipient (the USDT token contract): REFUSED 400 bad_recipient, relayer sent nothing
+C8 valid claim naming the vault itself as recipient: REFUSED 400 bad_recipient
+C30 valid claim from the United States: REFUSED 403 restricted_place
+C25 claim whose gift id carries a store key (1:moi:v1:56:...:ratelimit): REFUSED 400 bad_gift_id
+C49 claim body over 8 KB: REFUSED 413 body_too_large
+C23 31 claim requests in a minute from one address, each with a new X-Forwarded-For: REFUSED the 31st answered 429 rate_limited with Retry-After
+C7 claim of a gift whose sender Binance has just blocklisted: REFUSED 409 sender_blocked, relayer sent nothing
+C18 a landed claim sent again: REFUSED no second broadcast: 200 reused with the first hash, relayer nonce unchanged
+C18 three identical claims raced at the same moment: REFUSED one broadcast; all three answered 200 with the same hash
+C15 a real gift id opened on the claim page with a key that is not its own: REFUSED keyMatches false: no amount, token or note shown
+C9 the note read from /api/gift and opened without the link's key: REFUSED LinkError invalid; /api/gift carries ciphertext only
+C12 the whole claim flow recorded, every Moi and chain request searched for the claim key: REFUSED 0 hits in 2 Moi requests and 10 chain requests, and the gift was claimed
+C26 judge gift asked for with a wrong judge code: REFUSED 403 bad_judge_code
+C26 judge wallet proof issued 10 minutes ago: REFUSED 401 proof_expired
+C26 the same judge asks for a second gift, with a new wallet from another network: REFUSED 409 already_claimed
+C26 a second judge asks from the same network on the same day: REFUSED 429 too_many_from_network
+C44 the facilitator answers a second gift's payment with the first gift's settlement: REFUSED 502 settlement_unexpected, second gift not wrapped
+C42 the facilitator reports success for a transaction that paid Moi nothing: REFUSED 502 settlement_unexpected, gift not wrapped
+C42 one settled wrap payment replayed, unchanged, for a second gift: REFUSED 402 payment_mismatch (it names the first gift), b402 never asked
+C42 the same payment replayed for a second gift with its resource field stripped: REFUSED 402 payment_reused, b402 never asked
+C24 wrap payment that pays another address (in the accepted terms, and in the signed transfer only): REFUSED 402 payment_mismatch twice
+C24 wrap payment of 0.01 U where the price is 0.05: REFUSED 402 payment_mismatch
+C24 402 asked for with forged Host, X-Forwarded-Host and Origin headers: REFUSED payee and resource unchanged, built from config
+C24 claim of a gift whose wrapping fee was never paid: REFUSED 402 gift_not_wrapped
+C27 a 402 asking 5 USD, or paying another address, read by the website's payer: REFUSED no requirement picked, nothing signed
+C45 wrap through a node that reports chain 97: REFUSED 502 chain_unavailable
+C21 quote whose upstream approval is unlimited: REFUSED 422 quote_refused before any swap was fetched
+C21 quote whose upstream approval names a foreign spender: REFUSED 422 quote_refused
+C33 quote whose swap simulation sends the stock to someone else: REFUSED 422 simulation_refused
+C22 quote for TSLAB, a real bStock this vault does not list: REFUSED 400 not_listed, Web3 API never asked
+C30 quote with no country from the hosting platform: REFUSED 403 unknown_place
+C19 quote while the Web3 API fails with secret detail in its error: REFUSED 502 upstream_unavailable, no upstream text in the answer or the log
+C20 six crafted paths: dot segments, hex id, leading zero, query, encoded slash, a store key: REFUSED 404 not_found for all six
+C14 stock list whose upstream logo is javascript:, plain http, a lookalike host or a foreign host: REFUSED logoUrl null for all four
+C23 twenty stock-list requests from twenty addresses: REFUSED the Web3 API was asked once; 19 answers came from the 60-second cache
+C37 valid claim 30 seconds before the gift expires: REFUSED 409 gift_expiring, relayer sent nothing
+C8 valid claim one second after the gift expired: REFUSED 409 gift_expired
+C17 every transaction the relayer key signed during the run, checked for anything but vault.claim: REFUSED nothing else: 4 of 4 were vault.claim with no value on chain 56
+C19 every response and log line of the run searched for the relayer key, judge seed, claim keys and judge code: REFUSED 0 hits for 22 secrets in 110 responses and 73 log lines
+C46 every store key and value written during the run searched for client addresses and judge ids, plain or SHA-256: REFUSED 0 hits for 68 identities in 320 store writes
+# 41 attacks, 41 refused
