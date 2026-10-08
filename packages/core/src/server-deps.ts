@@ -31,7 +31,8 @@ const set = (value: string | undefined): string | undefined => (typeof value ===
 type Judge = { judge: ServerDeps["judge"]; privyAppId: string | null };
 
 // The seed is read only when a pool is set, so a server with judge gifts closed never holds it.
-async function readJudge(source: Readonly<Record<string, string | undefined>>, bad: string[]): Promise<Judge> {
+// `code` is MOI_JUDGE_CODE as loadServerEnv already checked it.
+async function readJudge(source: Readonly<Record<string, string | undefined>>, code: string | undefined, bad: string[]): Promise<Judge> {
   const appIdText = set(source.NEXT_PUBLIC_PRIVY_APP_ID);
   const privyAppId = appIdText !== undefined && PRIVY_APP_ID_TEXT.test(appIdText) ? appIdText : null;
   if (appIdText !== undefined && privyAppId === null) bad.push("NEXT_PUBLIC_PRIVY_APP_ID");
@@ -55,8 +56,11 @@ async function readJudge(source: Readonly<Record<string, string | undefined>>, b
     // deriveJudgeKey refuses a malformed or all-zero seed; its message is dropped like any value.
   }
   if (seed === null) bad.push("MOI_JUDGE_SEED");
+  // FA-9: a sign-in alone lets anyone with an account take a gift, so an open pool also needs the
+  // code that only the submission form's judge instructions carry.
+  if (code === undefined) bad.push("MOI_JUDGE_CODE");
   if (appIdText === undefined) bad.push("NEXT_PUBLIC_PRIVY_APP_ID");
-  return { judge: pool !== null && seed !== null ? { seed, pool } : null, privyAppId };
+  return { judge: pool !== null && seed !== null && code !== undefined ? { seed, pool, code } : null, privyAppId };
 }
 
 /**
@@ -89,8 +93,9 @@ async function checkRelayerMatches(client: PublicClient, vault: Address, relayer
  *   server refuses to start, unless MOI_ALLOW_MEMORY_STORE is exactly "1", which gives a one-process
  *   memory store and prints a warning through `opts.warn` (console.warn by default).
  * - Judge gifts: an absent MOI_JUDGE_POOL closes POST /api/judge. A set pool must pass
- *   parseJudgePool, and then MOI_JUDGE_SEED (0x and 64 hex, not all zeros) and
- *   NEXT_PUBLIC_PRIVY_APP_ID (1 to 64 letters and digits) are required.
+ *   parseJudgePool, and then MOI_JUDGE_SEED (0x and 64 hex, not all zeros), MOI_JUDGE_CODE (from
+ *   `env`, already in its exact form) and NEXT_PUBLIC_PRIVY_APP_ID (1 to 64 letters and digits)
+ *   are required. The code goes to the judge handler as `judge.code`.
  * - devAllowUnknownCountry is true only when MOI_DEV_ALLOW_UNKNOWN_COUNTRY is exactly "1".
  * - C46: clientHashKey, the key every client address and user id is hashed under, is derived from
  *   RELAYER_PRIVATE_KEY by HKDF (judge.ts deriveClientHashKey), so every instance of the server
@@ -114,7 +119,7 @@ export async function createServerDeps(
   const upstashToken = env.UPSTASH_REDIS_REST_TOKEN;
   const allowMemory = source.MOI_ALLOW_MEMORY_STORE === "1";
   if ((upstashUrl === undefined || upstashToken === undefined) && !allowMemory) bad.push("UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN");
-  const { judge, privyAppId } = await readJudge(source, bad);
+  const { judge, privyAppId } = await readJudge(source, env.MOI_JUDGE_CODE, bad);
   if (bad.length > 0) throw new EnvError(bad);
 
   let store: KvStore;

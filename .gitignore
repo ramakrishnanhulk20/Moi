@@ -22,3 +22,7 @@ node_modules/
 .next/
 .next-verify/
 bscscan-verify/
+
+# gift link files hold live claim keys
+gifts/
+**/gifts/

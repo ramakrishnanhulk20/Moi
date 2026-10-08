@@ -44,8 +44,11 @@ export type ServerDeps = {
   sponsor: Address | null;
   origin: string;
   wrapPriceUsd: string;
-  /** Null when MOI_JUDGE_POOL is unset, which closes POST /api/judge (503 judge_gifts_closed). */
-  judge: { seed: `0x${string}`; pool: Map<bigint, number> } | null;
+  /**
+   * Null when MOI_JUDGE_POOL is unset, which closes POST /api/judge (503 judge_gifts_closed).
+   * `code` is MOI_JUDGE_CODE, the code every judge types besides signing in (FA-9).
+   */
+  judge: { seed: `0x${string}`; pool: Map<bigint, number>; code: string } | null;
   privyAppId: string | null;
   /** The key every client address and user id is hashed under before it is stored or logged (C46). */
   clientHashKey: `0x${string}`;
@@ -304,6 +307,7 @@ async function dispatch(deps: ServerDeps, req: MoiRequest, seen: Seen): Promise<
           store: deps.store,
           judgeSeed: deps.judge.seed,
           pool: deps.judge.pool,
+          judgeCode: deps.judge.code,
           privyAppId: deps.privyAppId,
           clientHashKey: deps.clientHashKey,
           verifyAccessToken: deps.verifyAccessToken,

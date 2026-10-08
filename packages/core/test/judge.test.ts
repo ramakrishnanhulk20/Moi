@@ -1,6 +1,8 @@
 // Not covered here: a real node, a real vault, the real relayer and Privy. Keys are checked against
 // node:crypto's own HKDF as an independent second implementation; the HTTP route, its body cap,
-// its cache headers and how it reads the platform's IP and country belong to the route.
+// its cache headers and how it reads the platform's IP and country belong to the route. How the
+// judge code gets from the environment to this handler, and the route's log lines, are in
+// server.test.ts.
 import { createHash, createHmac, hkdfSync } from "node:crypto";
 import { bytesToHex, getAddress, recoverTypedDataAddress, type Hex, type PublicClient } from "viem";
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
@@ -100,6 +102,7 @@ const TODAY = new Date(Number(NOW) * 1000);
 const DAY = TODAY.toISOString().slice(0, 10);
 const STATE = { None: 0, Open: 1, Claimed: 2, Refunded: 3 } as const;
 const HASH_KEY = `0x${"7c".repeat(32)}` as const;
+const CODE = "MOI-7K4P-QX9M";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const sha = (text: string) => `0x${createHash("sha256").update(text).digest("hex")}`;
 
@@ -160,7 +163,7 @@ function fakeVerifier(judges: Judge[]) {
 const stamp = (ms: number) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
 const ISSUED = stamp(TODAY.getTime() - 30_000);
 
-type ProofOptions = { recipient?: Hex; signer?: PrivateKeyAccount; userId?: string; issuedAt?: string; walletProof?: string };
+type ProofOptions = { recipient?: Hex; signer?: PrivateKeyAccount; userId?: string; issuedAt?: string; walletProof?: string; judgeCode?: string };
 
 // The body a judge's page sends: the wallet signs judgeWalletMessage, as the page will.
 async function judgeBody(j: Judge, o: ProofOptions = {}) {
@@ -168,7 +171,7 @@ async function judgeBody(j: Judge, o: ProofOptions = {}) {
   const issuedAt = o.issuedAt ?? ISSUED;
   const message = judgeWalletMessage({ recipient, userId: o.userId ?? j.userId, issuedAt });
   const walletProof = o.walletProof ?? (await (o.signer ?? j.account).signMessage({ message }));
-  return { accessToken: j.accessToken, recipient, walletProof, issuedAt, declaration: true };
+  return { accessToken: j.accessToken, recipient, walletProof, issuedAt, judgeCode: o.judgeCode ?? CODE, declaration: true };
 }
 
 type Submitted = { giftId: bigint; recipient: Hex; signature: Hex };
@@ -194,6 +197,7 @@ function countingStore() {
     ...inner,
     setNx: async (k, v, ttl) => (writes.push(k), inner.setNx(k, v, ttl)),
     set: async (k, v, ttl) => (writes.push(k), inner.set(k, v, ttl)),
+    incrBy: async (k, n, ttl) => (writes.push(k), inner.incrBy(k, n, ttl)),
   };
   return { store, writes };
 }
@@ -211,6 +215,7 @@ async function setup(giftIds: bigint[], opts: { judges?: number; overrides?: Rec
     store,
     judgeSeed: SEED,
     pool: w.pool,
+    judgeCode: CODE,
     privyAppId: APP_ID,
     clientHashKey: HASH_KEY,
     verifyAccessToken: verifier.verify,
@@ -397,11 +402,11 @@ describe("handleJudgeClaim", () => {
     }
   });
 
-  it("never puts the seed, a derived key or the access token in a response, and never throws", async () => {
+  it("never puts the seed, a derived key, the access token or the judge code in a response, and never throws", async () => {
     const leaky = (text: string) => Object.assign(new Error(text), { cause: new Error(text) });
     const t = await setup([101n, 102n]);
     const [judge] = t.judges as [Judge];
-    const secrets = [SEED, SEED.slice(2), ...t.derived, ...t.derived.map((k) => k.slice(2)), judge.accessToken];
+    const secrets = [SEED, SEED.slice(2), ...t.derived, ...t.derived.map((k) => k.slice(2)), judge.accessToken, CODE, "7K4P", "QX9M"];
     const responses: unknown[] = [];
     const run = async (deps: Partial<typeof t.deps>) =>
       responses.push(await handleJudgeClaim({ ...t.deps, ...deps }, await judgeBody(judge), { country: "IN", clientIp: "203.0.113.7" }));
@@ -412,6 +417,10 @@ describe("handleJudgeClaim", () => {
     await run({ store: { ...t.store, setNx: async () => Promise.reject(new StoreError(`store saw ${SEED}`)) } });
     await run({ pool: null as unknown as Map<bigint, number> });
     await run({ judgeSeed: "0x1234" as `0x${string}` });
+    // A configured code outside its exact form refuses every claim rather than matching loosely.
+    await run({ judgeCode: CODE.toLowerCase() });
+    await run({ store: { ...t.store, get: async () => Promise.reject(new StoreError(`store saw ${CODE}`)) } });
+    responses.push(await handleJudgeClaim(t.deps, await judgeBody(judge, { judgeCode: "MOI-7K4P-QX9N" }), { country: "IN", clientIp: "203.0.113.7" }));
     await run({});
     expect(responses.map((r) => (r as { body: unknown }).body)).toEqual([
       { ok: false, error: "auth_unavailable" },
@@ -421,9 +430,65 @@ describe("handleJudgeClaim", () => {
       { ok: false, error: "store_unavailable" },
       { ok: false, error: "server_misconfigured" },
       { ok: false, error: "server_misconfigured" },
+      { ok: false, error: "server_misconfigured" },
+      { ok: false, error: "store_unavailable" },
+      { ok: false, error: "bad_judge_code" },
       { ok: true, giftId: "101", txHash: `0x${"1".padStart(64, "0")}` },
     ]);
     const text = JSON.stringify(responses);
     for (const secret of secrets) expect(text.toLowerCase()).not.toContain(secret.toLowerCase());
+  });
+});
+
+describe("handleJudgeClaim: the judge code (FA-9)", () => {
+  const counterFor = async (ip: string, at = TODAY) => keys.rateLimit("client", await hashClientId(HASH_KEY, ip), `judgecode-${Math.floor(at.getTime() / 60_000)}`);
+
+  it("lets the right code through to the usual flow, in any letter case and with spaces, and counts nothing", async () => {
+    const t = await setup([101n, 102n, 103n], { judges: 3 });
+    const [a, b, c] = t.judges as [Judge, Judge, Judge];
+    expect((await t.claim(a, "198.51.100.1")).body).toMatchObject({ ok: true, giftId: "101" });
+    expect((await t.claim(b, "198.51.100.2", { judgeCode: "moi-7k4p-qx9m" })).body).toMatchObject({ ok: true, giftId: "102" });
+    expect((await t.claim(c, "198.51.100.3", { judgeCode: "  MOI - 7K4P -\tqx9m " })).body).toMatchObject({ ok: true, giftId: "103" });
+    expect(t.writes.some((k) => k.includes(":ratelimit:"))).toBe(false);
+  });
+
+  it("refuses a wrong, missing, one-off or oversized code with 403 before the place, the verifier, the chain or any write but its counter", async () => {
+    const t = await setup([101n]);
+    const [judge] = t.judges as [Judge];
+    const base = await judgeBody(judge);
+    const missing: Record<string, unknown> = { ...base };
+    delete missing.judgeCode;
+    const bodies: unknown[] = [
+      { ...base, judgeCode: "MOI-2222-3333" },
+      missing,
+      { ...base, judgeCode: "MOI-7K4P-QX9N" },
+      // 33 characters: refused by length even though it would normalise to the code.
+      { ...base, judgeCode: `${CODE}${" ".repeat(20)}` },
+      { ...base, judgeCode: 7 },
+    ];
+    for (const body of bodies) {
+      // US is a restricted place, so 403 bad_judge_code here proves the code is checked first.
+      expect(await handleJudgeClaim(t.deps, body, { country: "US", clientIp: "203.0.113.7" })).toEqual({ status: 403, body: { ok: false, error: "bad_judge_code" } });
+    }
+    expect(t.verifier.calls).toHaveLength(0);
+    expect(t.rpc).toHaveLength(0);
+    const counter = await counterFor("203.0.113.7");
+    expect(t.writes).toEqual(Array.from({ length: 5 }, () => counter));
+    expect(await t.store.get(counter)).toBe("5");
+  });
+
+  it("answers 429 from the sixth wrong code in a minute, to the right code too, for that client and minute only", async () => {
+    const t = await setup([101n, 102n]);
+    const [judge, other] = t.judges as [Judge, Judge];
+    const wrong = await judgeBody(judge, { judgeCode: "MOI-2222-3333" });
+    for (let i = 0; i < 5; i += 1) expect((await handleJudgeClaim(t.deps, wrong, { country: "IN", clientIp: "203.0.113.7" })).status).toBe(403);
+    // The IPv4-mapped spelling of the same address counts in the same bucket.
+    expect(await handleJudgeClaim(t.deps, wrong, { country: "IN", clientIp: "::ffff:203.0.113.7" })).toEqual({ status: 429, body: { ok: false, error: "rate_limited" } });
+    expect(await t.claim(judge, "203.0.113.7")).toEqual({ status: 429, body: { ok: false, error: "rate_limited" } });
+    expect(t.verifier.calls).toHaveLength(0);
+
+    expect((await t.claim(other, "198.51.100.9")).body).toMatchObject({ ok: true, giftId: "101" });
+    const nextMinute = { ...t.deps, now: () => new Date(TODAY.getTime() + 60_000) };
+    expect((await handleJudgeClaim(nextMinute, await judgeBody(judge), { country: "IN", clientIp: "203.0.113.7" })).body).toMatchObject({ ok: true, giftId: "102" });
   });
 });

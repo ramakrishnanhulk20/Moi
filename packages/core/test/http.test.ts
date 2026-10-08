@@ -189,7 +189,7 @@ describe("route: body cap and JSON", () => {
   });
 
   it("answers 400 bad_json for an empty or broken body without calling the handler", async () => {
-    const { deps } = setup({ judge: { seed: `0x${"12".repeat(32)}`, pool: new Map([[1n, 0]]) }, privyAppId: "app123" });
+    const { deps } = setup({ judge: { seed: `0x${"12".repeat(32)}`, pool: new Map([[1n, 0]]), code: "MOI-7K4P-QX9M" }, privyAppId: "app123" });
     for (const path of ["/api/claim", "/api/quote", "/api/judge"]) {
       for (const body of [null, "", "{", "not json", '{"a":1}}']) {
         const res = await route(deps, post(path, body, { clientIp: "198.51.100.1" }));
@@ -270,7 +270,7 @@ describe("route: rate limits (C23)", () => {
 
 describe("route: headers", () => {
   it("sends no-store on every response except a good stock list", async () => {
-    const { deps } = setup({ judge: { seed: `0x${"12".repeat(32)}`, pool: new Map([[1n, 0]]) }, privyAppId: "app123" });
+    const { deps } = setup({ judge: { seed: `0x${"12".repeat(32)}`, pool: new Map([[1n, 0]]), code: "MOI-7K4P-QX9M" }, privyAppId: "app123" });
     const stocks = await route(deps, request("GET", "/api/stocks"));
     expect(stocks.headers["Cache-Control"]).toBe("public, max-age=30");
     const others = [
@@ -391,14 +391,14 @@ describe("route: judge gifts (C26)", () => {
     expect(handlerCalls()).toBe(0);
   });
 
-  it("hands the judge handler the seed, pool, verifier and the platform's address and place, never cached", async () => {
+  it("hands the judge handler the seed, pool, judge code, verifier and the platform's address and place, never cached", async () => {
     const verifyAccessToken = vi.fn();
-    const judge = { seed: `0x${"12".repeat(32)}` as const, pool: new Map([[5n, 0]]) };
+    const judge = { seed: `0x${"12".repeat(32)}` as const, pool: new Map([[5n, 0]]), code: "MOI-7K4P-QX9M" };
     const { deps } = setup({ judge, privyAppId: "app123", verifyAccessToken, devAllowUnknownCountry: true });
     const res = await route(deps, post("/api/judge", '{"a":1}', { region: "07" }));
     expect(res.headers["Cache-Control"]).toBe("no-store");
     expect(vi.mocked(handleJudgeClaim)).toHaveBeenCalledWith(
-      { client: deps.client, vault: VAULT, relayer: deps.relayer, store: deps.store, judgeSeed: judge.seed, pool: judge.pool, privyAppId: "app123", clientHashKey: HASH_KEY, verifyAccessToken },
+      { client: deps.client, vault: VAULT, relayer: deps.relayer, store: deps.store, judgeSeed: judge.seed, pool: judge.pool, judgeCode: judge.code, privyAppId: "app123", clientHashKey: HASH_KEY, verifyAccessToken },
       { a: 1 },
       { country: "IN", region: "07", clientIp: "203.0.113.7", devAllowUnknownCountry: true },
     );

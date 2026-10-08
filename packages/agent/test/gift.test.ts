@@ -17,7 +17,7 @@ import { unwrappedMarker } from "../src/linkfile.js";
 import { resolvePendingGifts } from "../src/pending.js";
 import { wrapSavedGift } from "../src/wrap.js";
 import type { Pinned } from "../src/pinned.js";
-import { ADDRESSES, fakeBaw, leftQuota, settings, STATUS_CONNECTED, WALLET } from "./fakes.js";
+import { ADDRESSES, bawDate, fakeBaw, leftQuota, settings, STATUS_CONNECTED, WALLET } from "./fakes.js";
 
 const captured = vi.hoisted(() => ({}) as { key?: { privateKey: `0x${string}`; address: `0x${string}` }; sealed?: `0x${string}` });
 
@@ -235,9 +235,14 @@ const SETTLING = (seconds: number) => () =>
   });
 
 /** The Moi server: 402 for a request without payment; each paid request takes the next reply in `paid` (200 once they run out). */
-function server(events: string[], required: unknown = requirements(), paid: (() => Response)[] = []) {
+function server(events: string[], required: unknown = requirements(), paid: (() => Response)[] = [], price: string | null = "185.20") {
   const payments: (string | null)[] = [];
-  const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+  const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url) === `${ORIGIN}/api/stocks`) {
+      events.push("fetch stocks");
+      const stocks = [{ address: NVDAB, symbol: "NVDAB", decimals: 18, uiMultiplier: "1000000000000000000", priceUsd: price, logoUrl: null }];
+      return new Response(JSON.stringify({ stocks, asOf: 1 }), { status: 200 });
+    }
     events.push("fetch");
     const payment = new Headers(init?.headers).get("payment-signature");
     payments.push(payment);
@@ -256,13 +261,14 @@ type SetupOpts = ChainOpts & {
   paid?: (() => Response)[];
   confirms?: boolean[];
   linkDir?: string;
+  price?: string | null;
 };
 
 function setup(opts: SetupOpts = {}) {
   const events: string[] = [];
   const sentInputs: Record<string, string> = {};
   const baw = wallet(events, opts.replies, sentInputs);
-  const srv = server(events, opts.required, opts.paid);
+  const srv = server(events, opts.required, opts.paid, opts.price);
   const lines: string[] = [];
   const questions: string[] = [];
   const answers = [...(opts.confirms ?? [])];
@@ -284,8 +290,11 @@ function setup(opts: SetupOpts = {}) {
 const INPUT = { ticker: "NVDA", usd: "5", note: "Happy Diwali" };
 
 /**
- * Steps the fake clock a second at a time until `work` settles. Real file writes happen between
- * sleeps, so the clock can only move after each real I/O turn, which setImmediate (left real) gives.
+ * Runs `work` under the fake clock (setTimeout and Date faked, setImmediate left real) until it
+ * settles. The clock jumps to the next timer only while the flow is parked on one of its own
+ * sleeps. WHY: the flow also does real file writes; moving the clock while one is in flight burns
+ * its deadlines in fake time it never saw, which is how a fixed step-per-turn loop flaked on a
+ * busy machine. The test's own timeout bounds a flow that never settles.
  */
 async function untilSettled<T>(work: Promise<T>): Promise<T> {
   let done = false;
@@ -293,9 +302,9 @@ async function untilSettled<T>(work: Promise<T>): Promise<T> {
     () => (done = true),
     () => (done = true),
   );
-  for (let step = 0; !done && step < 1_000; step += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-    await vi.advanceTimersByTimeAsync(1_000);
+  while (!done) {
+    if (vi.getTimerCount() > 0) await vi.advanceTimersToNextTimerAsync();
+    else await new Promise((resolve) => setImmediate(resolve));
   }
   return work;
 }
@@ -473,7 +482,8 @@ describe("sendGift", () => {
     // A 100 s wait is held to 15 s, so 3 minutes allow the first paid request plus 12 replays.
     expect(t.payments.filter((p) => p !== null)).toHaveLength(13);
     expect(readFileSync((err as GiftNotWrapped).linkFile, "utf8").split("\n")[0]).toBe(unwrappedMarker(GIFT_ID));
-  });
+    // The fake clock covers the 3 minutes; this real-time limit only has to outlast a busy machine.
+  }, 30_000);
 
   it("moi wrap refuses a gift id that is malformed or not open, before any payment", async () => {
     const claimed = setup({ giftState: 2 });
@@ -502,6 +512,93 @@ describe("sendGift", () => {
     expect((err as Error).message).toMatch(/no NVDAB arrived in your wallet on chain/);
     expect(t.calls.some((c) => c[0] === "contract-call")).toBe(false);
     expect(captured.key).toBeUndefined();
+  });
+
+  it("completes from the on-chain balance when the order list never shows the returned order id", async () => {
+    const t = setup({ replies: { "market-order swap": { orderId: "1111" }, "market-order list": { total: 0, page: 1, pageSize: 20, list: [] } } });
+    const result = await sendGift(t.deps, INPUT);
+    expect(result.giftId).toBe(GIFT_ID);
+    expect(result.txs).toEqual([APPROVE_HASH, CREATE_HASH, WRAP_HASH]);
+    expect(t.lines).toContain("Binance took the purchase as order 1111. Waiting for the stock to arrive in your wallet.");
+    const lists = t.calls.filter((c) => c[0] === "market-order" && c[1] === "list").map((c) => c.slice(2, 4));
+    expect(lists).toEqual([
+      ["--orderId", "1111"],
+      ["--binanceChainId", "56"],
+    ]);
+  });
+
+  it("finds the order among recent ones by pair, pay amount and booking time when its id differs, and logs both ids", async () => {
+    const started = Date.now();
+    const order = (over: Record<string, unknown>) => ({
+      orderType: "market",
+      orderId: "26100800001949552112",
+      chain: "56",
+      fromToken: USDT,
+      fromTokenQty: "5",
+      toToken: NVDAB,
+      toTokenActualQty: "0.0271",
+      status: "FINISHED",
+      txHash: SWAP_HASH,
+      bookTime: bawDate(started + 5_000),
+      ...over,
+    });
+    const list = (args: string[]) =>
+      args.includes("--orderId")
+        ? { total: 0, page: 1, pageSize: 20, list: [] }
+        : {
+            total: 3,
+            page: 1,
+            pageSize: 20,
+            list: [
+              order({ orderId: "900", fromTokenQty: "6", txHash: `0x${"01".repeat(32)}` }),
+              order({ orderId: "901", bookTime: bawDate(started - 3_600_000), txHash: `0x${"02".repeat(32)}` }),
+              order({}),
+            ],
+          };
+    const t = setup({ replies: { "market-order swap": { orderId: "1111" }, "market-order list": list } });
+    const result = await sendGift(t.deps, INPUT);
+    expect(result.txs[0]).toBe(SWAP_HASH);
+    expect(t.lines).toContain("Binance's order list shows the purchase as order 26100800001949552112, not order 1111 as the purchase reply said.");
+    const recent = t.calls.find((c) => c[0] === "market-order" && c[1] === "list" && !c.includes("--orderId"))!;
+    expect(Number(flag(recent, "--startTime"))).toBeGreaterThanOrEqual(started - 60_000);
+    expect(Number(flag(recent, "--startTime"))).toBeLessThanOrEqual(Date.now() - 60_000);
+    expect(flag(recent, "--pageSize")).toBe("20");
+  });
+
+  it("fails when the order is FAILED and no stock arrived, before any key or contract call", async () => {
+    const failed = { total: 1, page: 1, pageSize: 20, list: [{ orderType: "market", orderId: "1234567890", chain: "56", fromToken: USDT, toToken: NVDAB, status: "FAILED", txHash: null }] };
+    const t = setup({ balances: [0n, 0n], replies: { "market-order list": failed } });
+    const err = await sendGift(t.deps, INPUT).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GiftError);
+    expect((err as Error).message).toBe("Binance reports the purchase failed, and no stock arrived. Nothing was locked.");
+    expect(t.calls.some((c) => c[0] === "contract-call")).toBe(false);
+    expect(captured.key).toBeUndefined();
+  });
+
+  it.each<[string, { ticker: string; useHeld: string }, RegExp, boolean]>([
+    ["zero", { ticker: "NVDA", useHeld: "0" }, /--use-held must be a plain number of NVDAB tokens above zero/, false],
+    ["a token the vault does not list", { ticker: "AAPL", useHeld: "0.01" }, /AAPL is not a stock Moi can gift/, false],
+    ["less than fifty cents of stock", { ticker: "NVDA", useHeld: "0.001" }, /worth about 0\.1852 US dollars; a gift must be from 0\.5 to 100/, false],
+    ["more than the wallet holds", { ticker: "NVDA", useHeld: "0.03" }, /holds 0\.0271 NVDAB, less than the 0\.03 to gift/, true],
+  ])("--use-held refuses %s and never buys", async (_label, input, message, readsWallet) => {
+    const t = setup({ balances: [BOUGHT] });
+    const err = await sendGift(t.deps, { ...input, note: "Happy Diwali" }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GiftError);
+    expect((err as Error).message).toMatch(message);
+    expect(commands(t.calls)).toEqual(readsWallet ? ["wallet status", "wallet address", "wallet settings", "wallet left-quota"] : []);
+    expect(captured.key).toBeUndefined();
+  });
+
+  it("--use-held gifts stock already held with no quote or swap, approving exactly that amount", async () => {
+    // No daily trading allowance left: a gift of held stock makes no swap, so it still goes through.
+    const t = setup({ balances: [BOUGHT], replies: { "wallet left-quota": leftQuota(0) } });
+    const result = await sendGift(t.deps, { ticker: "NVDA", useHeld: "0.0271", note: "Happy Diwali" });
+    expect(result.giftId).toBe(GIFT_ID);
+    expect(result.txs).toEqual([APPROVE_HASH, CREATE_HASH, WRAP_HASH]);
+    expect(t.calls.some((c) => c[0] === "market-order")).toBe(false);
+    const approve = t.calls.find((c) => c[0] === "contract-call" && c[1] === "preview")!;
+    expect(flag(approve, "--inputData")).toBe(buildApproveVaultTx({ token: NVDAB, amount: BOUGHT, vault: VAULT }).data);
+    expect(t.events[0]).toBe("fetch stocks");
   });
 
   it.each([

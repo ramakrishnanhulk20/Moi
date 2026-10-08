@@ -19,7 +19,9 @@ const USAGE = [
   "  signin                                      Sign the Binance agent wallet in (approve it in the Binance App).",
   "  gift <TICKER> <USD> [--note text] [--days n] [--yes]",
   "                                              Buy a stock, lock it as a gift and save the gift link to ./gifts.",
-  "  wrap <GIFT_ID> [--yes]                      Pay the wrapping fee for a gift whose wrapping did not finish.",
+  "  gift <TICKER> --use-held <AMOUNT> [--note text] [--days n] [--yes]",
+  "                                              Gift that many tokens of a stock you already hold, without buying.",
+  "  wrap <GIFT_ID> [--yes]                     Pay the wrapping fee for a gift whose wrapping did not finish.",
 ].join("\n");
 
 const ROOT_ENV_FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
@@ -135,16 +137,26 @@ async function withDeps(yes: boolean, run: (deps: GiftDeps) => Promise<number>):
   }
 }
 
-async function gift(positionals: string[], values: { note?: string; days?: string; yes?: boolean }): Promise<number> {
+async function gift(
+  positionals: string[],
+  values: { note?: string; days?: string; yes?: boolean; "use-held"?: string },
+): Promise<number> {
   const [ticker, usd, ...extra] = positionals;
-  if (ticker === undefined || usd === undefined || extra.length > 0) {
+  const held = values["use-held"];
+  if (ticker === undefined || extra.length > 0 || (usd === undefined) === (held === undefined)) {
     say(USAGE);
     return 1;
   }
   if (values.days !== undefined && !/^[0-9]{1,3}$/.test(values.days)) {
     throw new GiftError("--days must be a whole number of days, such as 30.");
   }
-  const input = { ticker, usd, note: values.note ?? "", ...(values.days === undefined ? {} : { days: Number(values.days) }) };
+  const input = {
+    ticker,
+    note: values.note ?? "",
+    ...(usd === undefined ? {} : { usd }),
+    ...(held === undefined ? {} : { useHeld: held }),
+    ...(values.days === undefined ? {} : { days: Number(values.days) }),
+  };
   return withDeps(values.yes === true, async (deps) => {
     await sendGift(deps, input);
     return 0;
@@ -168,7 +180,7 @@ async function main(argv: string[]): Promise<number> {
     args: argv,
     allowPositionals: true,
     strict: true,
-    options: { note: { type: "string" }, days: { type: "string" }, yes: { type: "boolean" } },
+    options: { note: { type: "string" }, days: { type: "string" }, yes: { type: "boolean" }, "use-held": { type: "string" } },
   });
   const [command, ...rest] = positionals;
   if (command === "status" && rest.length === 0) return status();

@@ -114,7 +114,8 @@ function failureLine(what: string, err: unknown): string {
  * - Developer Mode is off or expired (contract calls need it);
  * - what is left today of the x402 limit is below `need.wrapFeeUsd` (default: the 0.10 USD fee
  *   ceiling), and, when `need.giftUsd` is given, what is left of the daily limit and of the
- *   Developer Mode limit is below the gift;
+ *   Developer Mode limit is below the gift (the daily limit is skipped when `need.buying` is
+ *   false, because a gift of stock already held makes no swap);
  * - the token scope is Limited (tradeAllTokens false), which may refuse the stock.
  * When the remaining amounts cannot be read, it says so in one problem line and checks the limits
  * themselves instead. A field that is missing or unreadable is a problem too (fail closed). It
@@ -122,7 +123,7 @@ function failureLine(what: string, err: unknown): string {
  */
 export async function preflight(
   baw: BawRunner,
-  need: { giftUsd?: string; wrapFeeUsd?: string } = {},
+  need: { giftUsd?: string; wrapFeeUsd?: string; buying?: boolean } = {},
 ): Promise<PreflightResult> {
   const problems: string[] = [];
   const done = (address: Address | null): PreflightResult => ({ address, ready: problems.length === 0, problems });
@@ -187,6 +188,8 @@ export async function preflight(
   const feeText = need.wrapFeeUsd ?? WRAP_FEE_CEILING_USD;
   const fee = usdUnits(feeText);
   const gift = need.giftUsd === undefined ? undefined : usdUnits(need.giftUsd);
+  // A gift of stock already held makes no swap, so the daily trading limit does not apply to it.
+  const buying = need.buying !== false;
   const remaining = await readRemaining(baw, settings, devModeOn ? { limit: devMode.data?.dailyLimit } : null);
 
   if (remaining !== null) {
@@ -195,7 +198,7 @@ export async function preflight(
         `Today you have ${usd(remaining.x402)} USD of x402 payments left, less than the ${feeText} USD gift wrapping fee. Raise the x402 daily limit in the ${SETTINGS_PATH}, or wait for it to refill.`,
       );
     }
-    if (gift !== undefined && (gift === null || remaining.daily < gift)) {
+    if (buying && gift !== undefined && (gift === null || remaining.daily < gift)) {
       problems.push(
         `Today you have ${usd(remaining.daily)} USD of your daily limit left, less than this ${need.giftUsd} USD gift. Raise the Daily limit in the ${SETTINGS_PATH}, or wait for it to refill.`,
       );
@@ -217,7 +220,7 @@ export async function preflight(
         `The x402 payment daily limit is ${String(settings.x402DailyLimit)} USD, below the ${feeText} USD gift wrapping fee. Raise it in the ${SETTINGS_PATH}, x402 daily limit.`,
       );
     }
-    if (gift !== undefined) {
+    if (buying && gift !== undefined) {
       const dailyLimit = usdUnits(settings.dailyLimit);
       if (dailyLimit === null || gift === null) {
         problems.push(`Moi could not read your daily limit. Check it in the ${SETTINGS_PATH}.`);

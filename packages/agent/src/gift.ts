@@ -33,20 +33,35 @@ export type GiftDeps = {
   log: (line: string) => void;
 };
 
-export type GiftInput = { ticker: string; usd: string; note: string; days?: number };
+/**
+ * `usd` buys that many US dollars of the stock first. `useHeld` instead gifts that many tokens of
+ * the stock already in the wallet (a decimal in the token's own units). Exactly one is given.
+ */
+export type GiftInput = { ticker: string; usd?: string; useHeld?: string; note: string; days?: number };
 
 export type GiftResult = { giftId: bigint; linkFile: string; txs: Hex[] };
 
 const CHAIN = "56";
 const MIN_GIFT_USD = "1";
+// WHY a lower floor for held stock: the 1 dollar minimum exists because Binance will not sell less;
+// stock already held has no such limit, and a 1 dollar buy arrives worth slightly less after fees.
+const MIN_HELD_GIFT_USD = "0.5";
 const MAX_DAYS = 90;
 // The vault's list is owner-curated and short; a far longer one means something is wrong, and
 // reading each symbol is one RPC call.
 const MAX_LISTED_TOKENS = 100;
 const POLL_MS = 3_000;
-const SWAP_DEADLINE_MS = 120_000;
+const SWAP_DEADLINE_MS = 180_000;
 // A node behind by a block can still show the old balance right after Binance says FINISHED.
 const BALANCE_READS = 5;
+// The order list's bookTime is Binance's clock and the swap start is this machine's; a minute of
+// slack keeps a skewed clock from hiding the order. An older identical order would also need the
+// same pay amount and pair to be mistaken for this one, and even then only the log is affected.
+const CLOCK_SKEW_MS = 60_000;
+const RECENT_ORDERS = "20";
+const SERVER_TIMEOUT_MS = 15_000;
+const MAX_STOCKS_BODY = 256 * 1024;
+const PRICE_TEXT = /^\d{1,40}(\.\d{1,40})?$/;
 const RECEIPT_TIMEOUT_MS = 120_000;
 const SIMULATION_OK = "000000000";
 
@@ -68,12 +83,22 @@ function decimalUnits(text: string, decimals: number): bigint {
   return BigInt(whole) * 10n ** BigInt(decimals) + BigInt(fraction.slice(0, decimals).padEnd(decimals, "0") || "0");
 }
 const swapSchema = z.object({ orderId: z.union([z.string(), z.number().int().nonnegative()]) }).loose();
-const orderListSchema = z
+// Fields as the 1.10.0 bundle prints a market order; bookTime is when Binance booked it.
+const orderSchema = z
   .object({
-    list: z
-      .array(z.object({ orderId: z.union([z.string(), z.number()]), status: z.string().max(32), txHash: z.string().nullable().optional() }).loose())
-      .max(100),
+    orderId: z.union([z.string(), z.number()]),
+    status: z.string().max(32),
+    txHash: z.string().nullable().optional(),
+    fromToken: z.string().max(64).optional(),
+    toToken: z.string().max(64).optional(),
+    fromTokenQty: z.string().max(90).optional(),
+    bookTime: z.string().max(64).nullable().optional(),
   })
+  .loose();
+type Order = z.infer<typeof orderSchema>;
+const orderListSchema = z.object({ list: z.array(orderSchema).max(100) }).loose();
+const stocksSchema = z
+  .object({ stocks: z.array(z.object({ address: z.string().max(64), priceUsd: z.string().max(64).nullable() }).loose()).max(100) })
   .loose();
 const riskSchema = z.object({ title: z.string().max(500), description: z.string().max(2_000).optional() }).loose();
 const previewSchema = z
@@ -187,17 +212,155 @@ function withoutKey(err: unknown, claimKey: Hex): unknown {
   return err;
 }
 
+type SwapWatch = {
+  wallet: Address;
+  stock: Stock;
+  usdt: Address;
+  pay: bigint;
+  usdtDecimals: number;
+  before: bigint;
+  floor: bigint;
+  orderId: string;
+  startedMs: number;
+};
+
+const sameAmount = (text: string | undefined, decimals: number, amount: bigint) =>
+  typeof text === "string" && DECIMAL_TEXT.test(text) && decimalUnits(text, decimals) === amount;
+
 /**
- * Buys `input.usd` dollars of a listed stock with the sender's Binance Agentic Wallet, locks it in
- * the Moi vault as a gift, saves the gift link and pays the wrapping fee through b402.
+ * The order for this swap: by the id the swap returned, and when the list does not know that id
+ * (it has differed from the listed one for other builders and in Moi's first live run), the one
+ * recent order for the same pair and pay amount booked after the swap started. Two candidates is
+ * no answer. Never throws: a failed read is no answer either.
+ */
+async function lookupOrder(baw: BawRunner, watch: SwapWatch): Promise<Order | undefined> {
+  try {
+    const byId = orderListSchema.safeParse(await baw(["market-order", "list", "--orderId", watch.orderId]));
+    const own = byId.success ? byId.data.list.find((o) => String(o.orderId) === watch.orderId) : undefined;
+    if (own !== undefined) return own;
+  } catch {
+    // Fall through to the recent orders.
+  }
+  const since = watch.startedMs - CLOCK_SKEW_MS;
+  try {
+    const recent = orderListSchema.safeParse(
+      await baw(["market-order", "list", "--binanceChainId", CHAIN, "--startTime", String(since), "--pageSize", RECENT_ORDERS]),
+    );
+    if (!recent.success) return undefined;
+    const matches = recent.data.list.filter((o) => {
+      const booked = typeof o.bookTime === "string" ? Date.parse(o.bookTime) : Number.NaN;
+      return (
+        sameAddress(o.fromToken, watch.usdt) &&
+        sameAddress(o.toToken, watch.stock.address) &&
+        sameAmount(o.fromTokenQty, watch.usdtDecimals, watch.pay) &&
+        Number.isFinite(booked) &&
+        booked >= since
+      );
+    });
+    return matches.length === 1 ? matches[0] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Waits for the swap and returns what arrived, decided by the chain, not by the order list
+ * (Moi's first live run: the list never showed the returned id as FINISHED while the stock had
+ * landed). Each round reads the order (lookupOrder) and the wallet's on-chain stock balance.
+ * Done when the balance has grown by at least `floor` in shares. Refuses at once when the order is
+ * FAILED and nothing arrived. When the order is FINISHED, a grown balance is final and a flat one
+ * gets a few more reads in case the node is a block behind. After 3 minutes without either, stops.
+ */
+async function waitForSwap(deps: GiftDeps, watch: SwapWatch): Promise<{ received: bigint; swapTx: Hex | null }> {
+  const { stock } = watch;
+  const deadline = Date.now() + SWAP_DEADLINE_MS;
+  let swapTx: Hex | null = null;
+  let listedId: string | null = null;
+  let flatAfterFinished = 0;
+  let finished = false;
+  let received = 0n;
+  for (;;) {
+    const order = await lookupOrder(deps.baw, watch);
+    if (order !== undefined) {
+      const id = String(order.orderId);
+      if (listedId === null && ID_TEXT.test(id)) {
+        listedId = id;
+        deps.log(
+          id === watch.orderId
+            ? `Binance's order list shows the purchase as order ${id}.`
+            : `Binance's order list shows the purchase as order ${id}, not order ${watch.orderId} as the purchase reply said.`,
+        );
+      }
+      if (typeof order.txHash === "string" && TX_HASH.test(order.txHash)) swapTx = order.txHash.toLowerCase() as Hex;
+    }
+    try {
+      received = (await balanceOf(stock.address, watch.wallet, deps.client)) - watch.before;
+    } catch {
+      // An RPC hiccup is not an answer; the previous reading stands until the next round.
+    }
+    if (received > 0n && rawToShares(received, stock.uiMultiplier) >= watch.floor) return { received, swapTx };
+    if (order?.status === "FAILED" && received <= 0n) throw new GiftError("Binance reports the purchase failed, and no stock arrived. Nothing was locked.");
+    if (order?.status === "FINISHED") {
+      finished = true;
+      if (received > 0n) break;
+      flatAfterFinished += 1;
+      if (flatAfterFinished >= BALANCE_READS) break;
+    }
+    if (Date.now() + POLL_MS > deadline) break;
+    await sleep(POLL_MS);
+  }
+  if (received <= 0n && finished) {
+    throw new GiftError(`Binance says the purchase finished, but no ${stock.symbol} arrived in your wallet on chain. Moi stopped before locking anything.`);
+  }
+  if (received <= 0n) {
+    throw new GiftError("The purchase was still processing after 3 minutes, so Moi stopped before locking anything. Check your wallet in the Binance App.");
+  }
+  return { received, swapTx };
+}
+
+/**
+ * The stock's US dollar price per whole token, as the Moi server's /api/stocks reports it (the
+ * keyed RWA price the server holds; the agent holds no API key). It only bounds a --use-held gift
+ * between the gift limits; it never picks an amount, a token or a payee. Fails closed.
+ */
+async function readPriceUsd(deps: GiftDeps, stock: Stock): Promise<bigint> {
+  const unreadable = new GiftError("Moi could not read the stock's price from its server, so it cannot check the gift's dollar value. Nothing was sent.");
+  let body: unknown;
+  try {
+    const res = await deps.fetchImpl(`${deps.pinned.serverOrigin}/api/stocks`, {
+      method: "GET",
+      redirect: "error",
+      signal: AbortSignal.timeout(SERVER_TIMEOUT_MS),
+    });
+    const text = await res.text();
+    if (res.status !== 200 || text.length > MAX_STOCKS_BODY) throw unreadable;
+    body = JSON.parse(text);
+  } catch {
+    throw unreadable;
+  }
+  const parsed = stocksSchema.safeParse(body);
+  const rows = parsed.success ? parsed.data.stocks.filter((s) => sameAddress(s.address, stock.address)) : [];
+  const price = rows.length === 1 ? rows[0]?.priceUsd : null;
+  if (typeof price !== "string" || !PRICE_TEXT.test(price) || !/[1-9]/.test(price)) throw unreadable;
+  return decimalUnits(price, 18);
+}
+
+type Bought = { stock: Stock; wallet: Address; received: bigint; swapTx: Hex | null };
+
+/**
+ * Buys `input.usd` dollars of a listed stock with the sender's Binance Agentic Wallet, or takes
+ * `input.useHeld` tokens of it the wallet already holds, then locks it in the Moi vault as a gift,
+ * saves the gift link and pays the wrapping fee through b402.
  *
  * Order: the ticker is resolved against the vault's on-chain list (C22) and the amount parsed
- * before any baw call, then the wallet preflight must be ready, then quote, confirm, swap (with
- * the received amount taken from the on-chain balance difference), claim key from the platform
- * random source (C11), approve the vault for exactly that amount, createGift, save the link,
- * wrap. Every target, amount, token and payee is built here or checked against `deps.pinned`
- * (C27): calldata comes from create.ts, never from a server; the fee must match pinned.payTo,
- * chain 56, WRAP_ASSETS and the fee ceiling (C24).
+ * before any baw call, then the wallet preflight must be ready. Buying: quote, confirm, swap, and
+ * the received amount is the on-chain balance difference once it reaches the quote's floor
+ * (waitForSwap). Holding: the amount must be above zero and at most the on-chain balance, and its
+ * value at the server's RWA price between the gift limits; no quote or swap call is made. Then, for
+ * both: claim key from the platform random source (C11), approve the vault for exactly that
+ * amount, createGift, save the link, wrap. Every target, amount, token and payee is built here or
+ * checked against `deps.pinned` (C27): calldata comes from create.ts, never from a server; the fee
+ * must match pinned.payTo, chain 56, WRAP_ASSETS and the fee ceiling (C24).
  *
  * The link is saved to `${linkDir}/gift-<id>.txt` (mode 0600 where the OS supports it) as soon as
  * the gift id is known, under a first line "# not wrapped yet: run `npm run moi -- wrap <id>`",
@@ -207,8 +370,6 @@ function withoutKey(err: unknown, claimKey: Hex): unknown {
  * the gift exists; GiftNotWrapped when the gift exists and its link is saved but it is not wrapped.
  */
 export async function sendGift(deps: GiftDeps, input: GiftInput): Promise<GiftResult> {
-  const { baw, client, pinned, log } = deps;
-
   if (typeof input.ticker !== "string" || !TICKER_TEXT.test(input.ticker)) {
     throw new GiftError("That is not a stock ticker. Use letters such as NVDA.");
   }
@@ -218,13 +379,21 @@ export async function sendGift(deps: GiftDeps, input: GiftInput): Promise<GiftRe
   if (input.days !== undefined && (!Number.isSafeInteger(input.days) || input.days < 1 || input.days > MAX_DAYS)) {
     throw new GiftError(`The gift must last a whole number of days from 1 to ${MAX_DAYS}.`);
   }
+  if ((input.usd === undefined) === (input.useHeld === undefined)) {
+    throw new GiftError("Give either a dollar amount to buy, or --use-held with an amount of stock you already hold, not both.");
+  }
 
-  const stock = await resolveStock(client, pinned.vault, input.ticker);
+  const stock = await resolveStock(deps.client, deps.pinned.vault, input.ticker);
+  const bought = input.useHeld === undefined ? await buy(deps, stock, input.usd ?? "") : await useHeld(deps, stock, input.useHeld);
+  return lockAndWrap(deps, bought, input);
+}
 
+async function buy(deps: GiftDeps, stock: Stock, usd: string): Promise<Bought> {
+  const { baw, client, pinned, log } = deps;
   const usdtDecimals = (await readTokenInfo(pinned.usdt, client)).decimals;
   let amount: bigint;
   try {
-    amount = parseAmount(input.usd, usdtDecimals);
+    amount = parseAmount(usd, usdtDecimals);
   } catch {
     throw new GiftError("The amount must be a plain number of US dollars, such as 5 or 12.50.");
   }
@@ -249,59 +418,65 @@ export async function sendGift(deps: GiftDeps, input: GiftInput): Promise<GiftRe
   if (!(await deps.confirm(`Buy about ${quote.data.toCoinAmount} ${stock.symbol} for ${qty} USDT with your Binance agent wallet ${wallet}?`))) {
     throw new GiftCancelled("Stopped before buying. Nothing was spent.");
   }
-
-  const before = await balanceOf(stock.address, wallet, client);
-  const swap = swapSchema.safeParse(await baw(["market-order", "swap", ...tradeFlags]));
-  const orderId = swap.success ? String(swap.data.orderId) : "";
-  if (!ID_TEXT.test(orderId)) {
-    throw new GiftError("Binance accepted the purchase but its reply had no readable order number. Check your wallet in the Binance App; Moi locked nothing.");
-  }
-  log("Binance is buying the stock. Waiting for it to finish.");
-  const deadline = Date.now() + SWAP_DEADLINE_MS;
-  let swapTx: Hex | null = null;
-  for (;;) {
-    let status: string | undefined;
-    try {
-      const page = orderListSchema.safeParse(await baw(["market-order", "list", "--orderId", orderId]));
-      const order = page.success ? page.data.list.find((o) => String(o.orderId) === orderId) : undefined;
-      status = order?.status;
-      if (typeof order?.txHash === "string" && TX_HASH.test(order.txHash)) swapTx = order.txHash.toLowerCase() as Hex;
-    } catch {
-      // A failed status read is not an answer; keep asking until the deadline.
-      status = undefined;
-    }
-    if (status === "FINISHED") break;
-    if (status === "FAILED") throw new GiftError("Binance reports the purchase failed. Nothing was locked.");
-    if (Date.now() + POLL_MS > deadline) {
-      throw new GiftError("The purchase was still processing after 2 minutes, so Moi stopped before locking anything. Check your wallet in the Binance App.");
-    }
-    await sleep(POLL_MS);
-  }
-  // The order id has been unreliable for other builders, so the amount is what arrived on chain.
-  let received = 0n;
-  for (let read = 1; ; read += 1) {
-    received = (await balanceOf(stock.address, wallet, client)) - before;
-    if (received > 0n || read >= BALANCE_READS) break;
-    await sleep(POLL_MS);
-  }
-  if (received <= 0n) {
-    throw new GiftError(`Binance says the purchase finished, but no ${stock.symbol} arrived in your wallet on chain. Moi stopped before locking anything.`);
-  }
-  const bought = `${formatUnits(received, stock.decimals)} ${stock.symbol}`;
   // baw prints a bStock quote in shares (token amount times the token's multiplier, read from the
   // 1.10.0 bundle), so the on-chain amount is turned into shares with the token's own on-chain
   // multiplier before the two are compared.
   const quoted = decimalUnits(quote.data.toCoinAmount, stock.decimals);
   const floor = quote.data.minReceive === undefined ? (quoted * QUOTE_FLOOR_PERCENT) / 100n : decimalUnits(quote.data.minReceive, stock.decimals);
+
+  const before = await balanceOf(stock.address, wallet, client);
+  const startedMs = Date.now();
+  const swap = swapSchema.safeParse(await baw(["market-order", "swap", ...tradeFlags]));
+  const orderId = swap.success ? String(swap.data.orderId) : "";
+  if (!ID_TEXT.test(orderId)) {
+    throw new GiftError("Binance accepted the purchase but its reply had no readable order number. Check your wallet in the Binance App; Moi locked nothing.");
+  }
+  log(`Binance took the purchase as order ${orderId}. Waiting for the stock to arrive in your wallet.`);
+  const { received, swapTx } = await waitForSwap(deps, { wallet, stock, usdt: pinned.usdt, pay: amount, usdtDecimals, before, floor, orderId, startedMs });
+
   const receivedShares = rawToShares(received, stock.uiMultiplier);
   if (receivedShares < floor) {
     throw new GiftError(
       `Binance delivered less than it quoted: ${formatUnits(receivedShares, stock.decimals)} ${stock.symbol} in shares arrived, ` +
         `below the minimum of ${formatUnits(floor, stock.decimals)} from its quote of ${quote.data.toCoinAmount}. ` +
-        `The ${bought} is in your wallet ${wallet}. Moi stopped before approving the vault, so nothing was locked.`,
+        `The ${formatUnits(received, stock.decimals)} ${stock.symbol} is in your wallet ${wallet}. Moi stopped before approving the vault, so nothing was locked.`,
     );
   }
-  log(`Bought ${bought}.`);
+  log(`Bought ${formatUnits(received, stock.decimals)} ${stock.symbol}.`);
+  return { stock, wallet, received, swapTx };
+}
+
+async function useHeld(deps: GiftDeps, stock: Stock, heldText: string): Promise<Bought> {
+  let held: bigint;
+  try {
+    held = parseAmount(heldText, stock.decimals);
+  } catch {
+    throw new GiftError(`--use-held must be a plain number of ${stock.symbol} tokens above zero, such as 0.0042.`);
+  }
+  // The value bound uses 18-decimal US dollar units throughout, so no float touches an amount.
+  const valueUsd = (held * (await readPriceUsd(deps, stock))) / 10n ** BigInt(stock.decimals);
+  if (valueUsd < parseAmount(MIN_HELD_GIFT_USD, 18) || valueUsd > parseAmount(MAX_GIFT_USD, 18)) {
+    throw new GiftError(`${heldText} ${stock.symbol} is worth about ${formatUnits(valueUsd, 18).slice(0, 8)} US dollars; a gift must be from ${MIN_HELD_GIFT_USD} to ${MAX_GIFT_USD}.`);
+  }
+
+  deps.log("Checking your Binance agent wallet.");
+  const check = await preflight(deps.baw, { giftUsd: formatUnits(valueUsd, 18), buying: false });
+  if (!check.ready || check.address === null) {
+    throw new GiftError(["Your Binance agent wallet is not ready:", ...check.problems.map((p) => `- ${p}`)].join("\n"));
+  }
+  const wallet = check.address;
+  const balance = await balanceOf(stock.address, wallet, deps.client);
+  if (held > balance) {
+    throw new GiftError(`Your wallet ${wallet} holds ${formatUnits(balance, stock.decimals)} ${stock.symbol}, less than the ${heldText} to gift. Nothing was sent.`);
+  }
+  deps.log(`Gifting ${formatUnits(held, stock.decimals)} ${stock.symbol} you already hold; nothing will be bought.`);
+  return { stock, wallet, received: held, swapTx: null };
+}
+
+async function lockAndWrap(deps: GiftDeps, from: Bought, input: GiftInput): Promise<GiftResult> {
+  const { client, pinned, log } = deps;
+  const { stock, wallet, received, swapTx } = from;
+  const bought = `${formatUnits(received, stock.decimals)} ${stock.symbol}`;
 
   const key = newClaimKey();
   try {

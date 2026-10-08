@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { getAddress, zeroAddress, type Address } from "viem";
 import { z } from "zod";
+import { JUDGE_CODE_TEXT } from "./judge.js";
 import { canonicalOrigin, canonicalPayTo, checkWrapPriceUsd } from "./wrap.js";
 
 const ROOT_ENV_FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
@@ -126,6 +127,8 @@ const serverSchema = z
     MOI_PAYOUT_ADDRESS: payoutAddress,
     MOI_SPONSOR_ADDRESS: vaultAddress.optional(),
     MOI_PUBLIC_ORIGIN: publicOrigin,
+    // judge.ts's own rule, so a code accepted here is exactly one a judge can type back (standard 2).
+    MOI_JUDGE_CODE: z.string().regex(JUDGE_CODE_TEXT).optional(),
   })
   .superRefine(upstashPair);
 
@@ -189,12 +192,14 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
  * settle to, checksummed, not zero) and MOI_PUBLIC_ORIGIN (an https origin, or http://localhost,
  * returned without a trailing slash) are required; the relayer limits, the Upstash pair,
  * BSC_RPC_URL, MOI_SPONSOR_ADDRESS and MOI_WRAP_PRICE_USD (default "0.05", above zero, at most $1
- * and 6 decimal places) are optional as in parseEnv. DEPLOYER_PRIVATE_KEY is never read, so it is
- * neither required nor returned, whatever the source holds. Throws EnvError naming the failing
- * variables only.
+ * and 6 decimal places) are optional as in parseEnv. MOI_JUDGE_CODE is optional here and, when set,
+ * must be exactly judge.ts JUDGE_CODE_TEXT ("MOI-" and two groups of four uppercase letters or
+ * digits, with no I, O, 0 or 1); createServerDeps requires it once a judge pool is set.
+ * DEPLOYER_PRIVATE_KEY is never read, so it is neither required nor returned, whatever the source
+ * holds. Throws EnvError naming the failing variables only.
  */
 export function parseServerEnv(source: Record<string, string | undefined>): ServerEnv {
-  return parseWith(serverSchema, pickShared(source));
+  return parseWith(serverSchema, { ...pickShared(source), MOI_JUDGE_CODE: optional(source.MOI_JUDGE_CODE) });
 }
 
 function loadEnvFileInto(file: string): void {

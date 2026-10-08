@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { bytesToHex, getAddress, hexToBytes, recoverMessageAddress, zeroAddress, type Address, type Hex, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
@@ -143,8 +144,27 @@ export function parseJudgePool(text: string): Map<bigint, number> {
   return pool;
 }
 
+/**
+ * The form of MOI_JUDGE_CODE: "MOI-" and two groups of four from an alphabet without I, O, 0 or 1,
+ * so a judge copying it from the submission form cannot mistake one character for another.
+ */
+export const JUDGE_CODE_TEXT = /^MOI-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
+
+/**
+ * The one form a judge code is compared in: every whitespace character removed and the letters
+ * uppercased, so " moi-7k4p-qx9m " and "MOI - 7K4P - QX9M" are the code MOI-7K4P-QX9M. The
+ * configured code goes through it too, so both sides of the compare come out of one normaliser
+ * (standard 2). Throws TypeError for anything but text.
+ */
+export function normalizeJudgeCode(text: string): string {
+  if (typeof text !== "string") throw new TypeError("A judge code must be text.");
+  return text.replace(/\s/g, "").toUpperCase();
+}
+
 /** Every answer a judge claim can get back. Short, fixed, and never built from upstream text (C19). */
 export type JudgeClaimErrorCode =
+  | "bad_judge_code"
+  | "rate_limited"
   | "bad_request"
   | "bad_token"
   | "bad_recipient"
@@ -177,6 +197,8 @@ export type JudgeClaimResponse = {
 };
 
 const STATUS: Record<JudgeClaimErrorCode, number> = {
+  bad_judge_code: 403,
+  rate_limited: 429,
   bad_request: 400,
   bad_token: 401,
   bad_recipient: 400,
@@ -220,6 +242,12 @@ function isIssuedAtText(value: string): boolean {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === `${value.slice(0, 19)}.000Z`;
 }
 
+// 32 characters leaves room for the 13-character code with spaces a judge typed around it.
+const judgeCodeField = z.string().max(32);
+// Only the code, read from the body before anything else in it, so a caller without the code
+// learns nothing about the rest of the body's rules.
+const judgeCodeSchema = z.object({ judgeCode: judgeCodeField });
+
 // 4096 characters is far above a real Privy access token and keeps a pasted blob away from the
 // verifier. The total body size is the route's cap.
 const bodySchema = z.strictObject({
@@ -227,6 +255,7 @@ const bodySchema = z.strictObject({
   recipient: z.string().max(42),
   walletProof: z.string().regex(WALLET_PROOF_TEXT),
   issuedAt: z.string().max(20).refine(isIssuedAtText),
+  judgeCode: judgeCodeField,
   declaration: z.literal(true),
 });
 
@@ -267,6 +296,13 @@ const TX_HASH_TEXT = /^0x[0-9a-f]{64}$/;
 // The same rule as claim.ts: EIP-7702 code 0xef0100 plus a 20-byte address is still an
 // externally owned account whose key signs for it.
 const DELEGATION_CODE = /^0xef0100[0-9a-f]{40}$/;
+const WRONG_CODE_LIMIT = 5n;
+const CODE_WINDOW_MS = 60_000;
+// Two windows, as for http.ts's request counters, so a counter outlives its minute and then expires.
+const CODE_COUNTER_TTL_SECONDS = 120;
+const COUNT_TEXT = /^\d{1,19}$/;
+// The bucket http.ts counts a caller without a usable address in; a canonical address never reads so.
+const UNKNOWN_CLIENT = "unknown";
 // The characters an IPv4 or IPv6 address can hold, checked before the URL parser sees the text so
 // a host name, a port or a user name can never be read as an address.
 const IP_TEXT = /^[0-9a-fA-F:.]{2,45}$/;
@@ -345,6 +381,8 @@ type JudgeDeps = {
   store: KvStore;
   judgeSeed: `0x${string}`;
   pool: Map<bigint, number>;
+  /** MOI_JUDGE_CODE, in the form JUDGE_CODE_TEXT describes. */
+  judgeCode: string;
   privyAppId: string;
   /** The server's key for hashClientId (C46), from deriveClientHashKey. */
   clientHashKey: `0x${string}`;
@@ -354,6 +392,42 @@ type JudgeDeps = {
 
 type JudgeCtx = { country?: string | null; region?: string | null; clientIp: string; devAllowUnknownCountry?: boolean };
 
+// Constant time, so how long a refusal takes says nothing about how much of a guess was right. Two
+// lengths that differ are a mismatch without a compare; the length is public in the code's format.
+function sameJudgeCode(given: string, expected: string): boolean {
+  const a = Buffer.from(given, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+// FA-9, step 0 of a claim. Null when the code is right and this client is within its limit,
+// otherwise the answer. The wrong-code counter is the only store write a caller without the code
+// can cause, and the code itself is never stored, returned or put in a message.
+async function judgeCodeRefusal(deps: JudgeDeps, body: unknown, ctx: JudgeCtx): Promise<JudgeClaimResponse | null> {
+  // Server config is read like input: a configured code in any other form refuses every claim.
+  if (typeof deps.judgeCode !== "string" || !JUDGE_CODE_TEXT.test(deps.judgeCode)) return fail("server_misconfigured");
+  const field = judgeCodeSchema.safeParse(body);
+  const right = field.success && sameJudgeCode(normalizeJudgeCode(field.data.judgeCode), normalizeJudgeCode(deps.judgeCode));
+  const minute = Math.floor((deps.now ?? (() => new Date()))().getTime() / CODE_WINDOW_MS);
+  const clientHash = await hashClientId(deps.clientHashKey, canonicalClientIp(ctx?.clientIp) ?? UNKNOWN_CLIENT);
+  const counter = keys.rateLimit("client", clientHash, `judgecode-${minute}`);
+  try {
+    if (!right) {
+      const wrong = await deps.store.incrBy(counter, 1n, CODE_COUNTER_TTL_SECONDS);
+      if (typeof wrong !== "bigint") return fail("store_unavailable");
+      return fail(wrong > WRONG_CODE_LIMIT ? "rate_limited" : "bad_judge_code");
+    }
+    // WHY a right code is limited too: if only wrong guesses got 429, a pass would still mark the
+    // right one, and the guessing could go on past the limit.
+    const seen = await deps.store.get(counter);
+    if (seen === null) return null;
+    if (typeof seen !== "string" || !COUNT_TEXT.test(seen)) return fail("store_unavailable");
+    return BigInt(seen) > WRONG_CODE_LIMIT ? fail("rate_limited") : null;
+  } catch {
+    return fail("store_unavailable");
+  }
+}
+
 /**
  * The judge-gift handler, framework free. A signed-in judge names a wallet and proves it is theirs
  * with a signed message, and the server signs the claim for one pre-paid pool gift with that
@@ -361,9 +435,16 @@ type JudgeCtx = { country?: string | null; region?: string | null; clientIp: str
  * `body` is the already-parsed JSON (the route caps its size); `ctx` is the country, ISO 3166-2
  * region and client address the hosting platform reports. In order, answering with the first
  * that fails:
+ * 0. the judge code (FA-9), before any other field, the place, the verifier, the chain or any
+ *    other store key: body.judgeCode, text of at most 32 characters, through normalizeJudgeCode
+ *    and equal in constant time to `judgeCode`. A wrong, missing or oversized code is 403
+ *    bad_judge_code and adds one to this client's wrong-code count for the minute (keys.rateLimit,
+ *    scope "client", window "judgecode-<minute>", the keyed hash of the canonical address or of
+ *    "unknown", as http.ts counts). Above 5 wrong codes in a minute every answer to that client is
+ *    429 rate_limited, a right code included. A store failure here is 502 store_unavailable;
  * 1. shape: exactly {accessToken (at most 4096 characters), recipient, walletProof (0x and 130
- *    hex), issuedAt (YYYY-MM-DDTHH:MM:SSZ), declaration: true} (400 or 401, 403 no_declaration
- *    when only the declaration is wrong);
+ *    hex), issuedAt (YYYY-MM-DDTHH:MM:SSZ), judgeCode, declaration: true} (400 or 401, 403
+ *    no_declaration when only the declaration is wrong);
  * 2. eligibility for the place and the declaration, before any network call (403, C30);
  * 3. the recipient through getAddress and not zero (400); the Privy access token through
  *    `verifyAccessToken` (privy.ts by default; 401, 502), which gives the user id; the wallet
@@ -387,8 +468,8 @@ type JudgeCtx = { country?: string | null; region?: string | null; clientIp: str
  *    503 try_again;
  * 7. 200 {ok: true, giftId (decimal text), txHash}. A 200 means "submitted"; the page confirms the
  *    receipt with relayer.ts confirmClaim before it says "claimed" (C16).
- * Never throws. Every refusal is a fixed code, and the seed, every derived key and the access
- * token are never in a response, an error or a thrown message (C12, C19). Fails closed: a store,
+ * Never throws. Every refusal is a fixed code, and the seed, every derived key, the access token
+ * and the judge code are never in a response, an error or a thrown message (C12, C19). Fails closed: a store,
  * chain or verifier failure is a refusal, never a handout.
  */
 export async function handleJudgeClaim(deps: JudgeDeps, body: unknown, ctx: JudgeCtx): Promise<JudgeClaimResponse> {
@@ -402,6 +483,9 @@ export async function handleJudgeClaim(deps: JudgeDeps, body: unknown, ctx: Judg
 }
 
 async function judgeClaim(deps: JudgeDeps, body: unknown, ctx: JudgeCtx): Promise<JudgeClaimResponse> {
+  const refused = await judgeCodeRefusal(deps, body, ctx);
+  if (refused !== null) return refused;
+
   const shape = bodySchema.safeParse(body);
   if (!shape.success) return fail(shapeErrorCode(shape.error.issues));
   const fields = shape.data;

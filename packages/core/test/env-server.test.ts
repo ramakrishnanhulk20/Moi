@@ -19,6 +19,7 @@ const server = {
 };
 const SERVER_KEYS = [
   "BSC_RPC_URL",
+  "MOI_JUDGE_CODE",
   "MOI_PAYOUT_ADDRESS",
   "MOI_PUBLIC_ORIGIN",
   "MOI_RELAYER_DAILY_CAP_WEI",
@@ -42,6 +43,7 @@ const TOUCHED = [
   "MOI_RELAYER_DAILY_CAP_WEI",
   "MOI_WRAP_PRICE_USD",
   "MOI_SPONSOR_ADDRESS",
+  "MOI_JUDGE_CODE",
 ];
 
 const saved = new Map(TOUCHED.map((k) => [k, process.env[k]]));
@@ -123,6 +125,24 @@ describe("parseServerEnv", () => {
       expect(err).toBeInstanceOf(EnvError);
       expect((err as EnvError).variables).toEqual([name]);
       expect((err as EnvError).message).not.toContain(value);
+    }
+  });
+
+  it("takes MOI_JUDGE_CODE only in its exact form, leaves it unset when absent, and never echoes a bad one", () => {
+    expect(parseServerEnv(server).MOI_JUDGE_CODE).toBeUndefined();
+    expect(parseServerEnv({ ...server, MOI_JUDGE_CODE: "" }).MOI_JUDGE_CODE).toBeUndefined();
+    expect(parseServerEnv({ ...server, MOI_JUDGE_CODE: "MOI-7K4P-QX9M" }).MOI_JUDGE_CODE).toBe("MOI-7K4P-QX9M");
+    // Lowercase, a space, then I, O, 0 and 1 (the characters a judge could misread), and the wrong shapes.
+    for (const value of ["moi-7k4p-qx9m", " MOI-7K4P-QX9M", "MOI-7K4I-QX9M", "MOI-7K4O-QX9M", "MOI-7K40-QX9M", "MOI-7K41-QX9M", "MOI-7K4PQX9M", "MOI-7K4P-QX9", "MOI-7K4P-QX9M-AAAA", "ABC-7K4P-QX9M"]) {
+      let err: unknown = null;
+      try {
+        parseServerEnv({ ...server, MOI_JUDGE_CODE: value });
+      } catch (e) {
+        err = e;
+      }
+      expect(err, value).toBeInstanceOf(EnvError);
+      expect((err as EnvError).variables).toEqual(["MOI_JUDGE_CODE"]);
+      expect((err as EnvError).message).not.toContain(value.trim());
     }
   });
 
