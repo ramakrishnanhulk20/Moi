@@ -1,0 +1,684 @@
+/* The page frame: the hero stage light centred at 50% 32%, film grain over everything */
+.claim-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  overflow: clip;
+  isolation: isolate;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(60% 60% at 50% 32%, rgba(242, 177, 61, 0.16), transparent 70%),
+    radial-gradient(40% 40% at 20% 80%, color-mix(in srgb, var(--maroon) 50%, transparent), transparent 70%);
+}
+
+.claim-page .hero-grain {
+  position: absolute;
+  inset: -8px;
+  z-index: 5;
+  background-size: 240px 240px;
+  mix-blend-mode: overlay;
+  opacity: 0.06;
+  pointer-events: none;
+  animation: claim-grain-jitter 0.5s steps(2) infinite;
+}
+
+@keyframes claim-grain-jitter {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-2px, 1px);
+  }
+  100% {
+    transform: translate(1px, -2px);
+  }
+}
+
+/* Top bar */
+.claim-bar {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 60px;
+  padding-inline: clamp(16px, 4vw, 56px);
+}
+
+.claim-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.claim-wordmark {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  transition: color 150ms;
+}
+
+.claim-brand:hover .claim-wordmark {
+  color: var(--gold);
+}
+
+.claim-brand:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 4px;
+}
+
+/* The panel under the scene box: one narrow column, because this page is a moment and not a dashboard */
+.claim-panel {
+  position: relative;
+  z-index: 2;
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
+  padding: 24px 16px 48px;
+  animation: claim-rise 500ms cubic-bezier(0.215, 0.61, 0.355, 1) both;
+}
+
+.claim-page[data-scene="none"] .claim-panel {
+  padding-top: clamp(48px, 14vh, 120px);
+}
+
+.claim-panel[data-screen="opened"] {
+  animation-delay: 400ms;
+}
+
+@keyframes claim-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes claim-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Text */
+.claim-meta {
+  margin: 0 0 16px;
+  color: var(--ink-muted);
+  font: 400 12px/1.7 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.claim-h {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.claim-h-opening {
+  font-size: 28px;
+}
+
+.claim-h-big {
+  font-size: clamp(2.4rem, 9vw, 3.6rem);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.claim-italic {
+  color: var(--gold);
+  font-style: italic;
+}
+
+.claim-body {
+  margin: 16px 0 0;
+  color: var(--ink-muted);
+  font: 400 16px/1.55 var(--font-body);
+  overflow-wrap: anywhere;
+}
+
+.claim-body-ink {
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.claim-count {
+  margin: 20px 0 0;
+  color: var(--ink);
+  font: 400 13px/1.5 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.claim-timer {
+  margin: 16px 0 0;
+  color: var(--ink);
+  font: 400 13px/1 var(--font-mono);
+}
+
+.claim-fine {
+  margin: 12px 0 0;
+  color: var(--ink-muted);
+  font: 400 14px/1.5 var(--font-body);
+}
+
+.claim-unavailable {
+  margin: 24px 0 0;
+  color: var(--error);
+  font: 400 16px/1.5 var(--font-body);
+}
+
+/* Skeleton bars while the link opens */
+.claim-skel {
+  display: block;
+  width: 100%;
+  height: 14px;
+  margin-top: 16px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--line) 0%, rgba(246, 239, 230, 0.24) 50%, var(--line) 100%);
+  background-size: 200% 100%;
+  animation: claim-shimmer 1.4s linear infinite;
+}
+
+.claim-skel-short {
+  width: 64%;
+}
+
+@keyframes claim-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* Text links and text buttons: gold, with an underline that draws from the left on hover */
+.claim-link {
+  position: relative;
+  display: inline-block;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--gold);
+  font: 600 15px/1.4 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.claim-link-small {
+  font-size: 14px;
+}
+
+.claim-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 250ms ease-out;
+}
+
+.claim-link:hover::after {
+  transform: scaleX(1);
+}
+
+.claim-link:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.claim-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 20px 0 0;
+}
+
+.claim-retry {
+  margin-top: 12px;
+}
+
+/* Buttons */
+.claim-primary,
+.claim-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 24px;
+  border-radius: 8px;
+  font: 600 16px/1.2 var(--font-body);
+  text-align: center;
+  cursor: pointer;
+}
+
+.claim-primary {
+  border: 0;
+  background: var(--gold);
+  color: var(--bg);
+  transition: background-color 150ms;
+}
+
+.claim-primary:not(:disabled):hover {
+  background: var(--gold-deep);
+}
+
+.claim-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.claim-secondary {
+  border: 1px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
+  transition:
+    background-color 150ms,
+    color 150ms;
+}
+
+.claim-secondary:hover {
+  background: var(--gold);
+  color: var(--bg);
+}
+
+.claim-primary:focus-visible,
+.claim-secondary:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Signed in: who, the declaration, and why it is asked */
+.claim-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin: 24px 0 0;
+  color: var(--ink-muted);
+  font: 400 14px/1.5 var(--font-body);
+  overflow-wrap: anywhere;
+}
+
+.claim-nowrap {
+  white-space: nowrap;
+}
+
+.claim-check {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 20px;
+  color: var(--ink);
+  font: 400 15px/1.45 var(--font-body);
+  cursor: pointer;
+}
+
+.claim-check-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.claim-check-box {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--bg);
+  transition:
+    border-color 150ms,
+    background-color 150ms;
+}
+
+.claim-check-box svg {
+  opacity: 0;
+}
+
+.claim-check:hover .claim-check-box {
+  border-color: var(--ink-muted);
+}
+
+.claim-check-input:checked + .claim-check-box {
+  border-color: var(--gold);
+  background: var(--gold);
+}
+
+.claim-check-input:checked + .claim-check-box svg {
+  opacity: 1;
+}
+
+.claim-check:hover .claim-check-input:checked + .claim-check-box {
+  border-color: var(--gold-deep);
+  background: var(--gold-deep);
+}
+
+.claim-check-input:focus-visible + .claim-check-box {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.claim-why {
+  margin-top: 8px;
+}
+
+.claim-why-text {
+  margin-top: 4px;
+}
+
+.claim-open {
+  margin-top: 20px;
+}
+
+/* The note the sender wrote, shown as plain text */
+.claim-note {
+  margin: 24px 0 0;
+  padding-left: 16px;
+  border-left: 2px solid var(--gold);
+}
+
+.claim-note-text {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  font-style: italic;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.claim-note-from {
+  margin: 12px 0 0;
+  color: var(--ink-muted);
+  font: 400 11px/1.4 var(--font-mono);
+  letter-spacing: 0.18em;
+}
+
+/* A failed step */
+.claim-error {
+  padding: 16px;
+  border: 1px solid var(--error);
+  border-radius: 8px;
+}
+
+.claim-error-h {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.claim-error-body {
+  margin-top: 8px;
+}
+
+/* Reduced motion: the panel only fades, for 200 ms, and nothing else moves */
+@media (prefers-reduced-motion: reduce) {
+  .claim-panel,
+  .claim-panel[data-screen="opened"] {
+    animation: claim-fade 200ms ease both;
+  }
+
+  .claim-page .hero-grain,
+  .claim-skel {
+    animation: none;
+  }
+
+  .claim-link::after,
+  .claim-wordmark,
+  .claim-primary,
+  .claim-secondary,
+  .claim-check-box {
+    transition: none;
+  }
+}
+
+/* The scene box: the hero's envelope and certificate in their claim layout */
+.claim-stage {
+  --hand: 0;
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: 100%;
+  height: 44vh;
+}
+
+.claim-stage[data-state="claimed"] {
+  --hand: 1;
+}
+
+.claim-stage .hero-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  container-type: size;
+  transition: opacity 200ms ease;
+}
+
+.claim-stage[data-state="dimmed"] .hero-stage,
+.claim-stage[data-state="dimmed"] .claim-static {
+  opacity: 0.35;
+}
+
+.claim-stage .hero-stage-canvas,
+.claim-stage .hero-fallback {
+  position: absolute;
+  inset: 0;
+}
+
+.claim-stage .hero-card-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+.claim-stage[data-state="claimed"] .hero-card-layer {
+  opacity: 0.6;
+}
+
+/* The drawing that stands in until the canvas has drawn. A gift that is already open skips it, so the closed drawing never flashes. */
+.claim-stage .hero-fallback {
+  pointer-events: none;
+  transition: opacity 400ms ease;
+}
+
+.claim-stage .hero-fallback[data-gone="true"],
+.claim-stage[data-state="claimed"] .hero-fallback {
+  opacity: 0;
+}
+
+/* 2.4 world units of envelope is 63.4% of the box height at the camera distance, so the drawing matches the canvas. */
+.claim-stage .hero-fallback .envelope-fallback {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 63.4cqh;
+  height: auto;
+  overflow: visible;
+  transform: translate(-50%, -50%) perspective(900px) rotateX(-6.9deg) rotateY(-18.3deg);
+}
+
+/* The glow while the claim is on its way */
+.claim-stage[data-glow="on"] .hero-card-layer {
+  animation: claim-glow 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes claim-glow {
+  from {
+    filter: drop-shadow(0 0 0 rgba(242, 177, 61, 0));
+  }
+  to {
+    filter: drop-shadow(0 0 24px rgba(242, 177, 61, 0.35));
+  }
+}
+
+/* The OPENED stamp over a certificate that was already opened */
+.claim-stamp {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  padding: 6px 12px;
+  border: 2px solid var(--ok);
+  border-radius: 4px;
+  color: var(--ok);
+  font: 400 14px/1 var(--font-mono);
+  letter-spacing: 0.3em;
+  transform: translate(-50%, -50%) rotate(-8deg);
+  pointer-events: none;
+}
+
+/* Reduced motion: no scene, one still picture per state, and a 200 ms fade between pictures */
+.claim-static {
+  position: absolute;
+  inset: 0;
+  container-type: size;
+  transition: opacity 200ms ease;
+}
+
+.claim-static-closed,
+.claim-static-open,
+.claim-static-cert {
+  position: absolute;
+  left: 50%;
+  transition: opacity 200ms ease;
+}
+
+.claim-static-closed {
+  top: 50%;
+  width: 63.4cqh;
+  transform: translate(-50%, -50%) perspective(900px) rotateX(-6.9deg) rotateY(-18.3deg);
+}
+
+.claim-static-open {
+  top: calc(50% + 13.2cqh);
+  width: 63.4cqh;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+}
+
+.claim-static-cert {
+  top: 50%;
+  width: min(92cqw, 139.4cqh);
+  transform: translate(-50%, -50%) rotate(2.3deg);
+  opacity: 0;
+}
+
+.claim-static svg.envelope-fallback {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.claim-stage[data-pose="open"] .claim-static-closed,
+.claim-stage[data-pose="done"] .claim-static-closed {
+  opacity: 0;
+}
+
+.claim-stage[data-pose="open"] .claim-static-open {
+  opacity: 1;
+}
+
+.claim-stage[data-pose="done"] .claim-static-open {
+  opacity: 0.35;
+}
+
+.claim-stage[data-pose="done"] .claim-static-cert {
+  opacity: 1;
+  --hand: 1;
+}
+
+.claim-stage[data-state="claimed"] .claim-static-cert {
+  opacity: 0.6;
+}
+
+@media (min-width: 1024px) {
+  .claim-stage {
+    height: 52vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .claim-stage[data-glow="on"] .hero-card-layer {
+    animation: none;
+  }
+}
+
+/* Desktop: the scene takes the left side at full height and the panel sits beside it, so the
+   main button is on the first screen of a laptop instead of under a 52vh scene box. */
+@media (min-width: 1024px) {
+  .claim-page {
+    display: grid;
+    grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
+    grid-template-rows: 60px minmax(0, 1fr);
+    background-image:
+      radial-gradient(50% 60% at 30% 48%, rgba(242, 177, 61, 0.16), transparent 70%),
+      radial-gradient(40% 40% at 80% 85%, color-mix(in srgb, var(--maroon) 50%, transparent), transparent 70%);
+  }
+
+  .claim-bar {
+    grid-column: 1 / -1;
+  }
+
+  .claim-stage {
+    grid-column: 1;
+    grid-row: 2;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: calc(100svh - 60px);
+  }
+
+  .claim-panel {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: center;
+    max-width: 480px;
+    margin-inline: 0;
+    padding: 48px 56px 48px 0;
+  }
+
+  .claim-page[data-scene="none"] .claim-panel {
+    grid-column: 1 / -1;
+    margin-inline: auto;
+    padding-inline: 16px;
+  }
+}

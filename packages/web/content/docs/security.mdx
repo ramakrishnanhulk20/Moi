@@ -1,0 +1,103 @@
+---
+title: Security
+description: What Moi promises, what it does not defend against, and the attacks it has been run against.
+---
+
+Moi holds other people's stock for up to 90 days, behind a secret carried in a link. This page says what Moi promises, what it cannot promise, the attacks that were run against it, and how the secret is kept. The full rules are in the [threat model](https://github.com/ramakrishnanhulk20/Moi/blob/main/docs/security/threat-model.md), where each one has a number. Those numbers appear below in parentheses, so you can look any promise up. The [system description](https://github.com/ramakrishnanhulk20/Moi/blob/main/docs/security/system-description.md) says what the system does, before any protection is added.
+
+## What Moi promises
+
+The threat model has 50 numbered rules, C1 to C50. Here they are grouped by who they protect.
+
+### The gift itself
+
+- A gift pays out once, in full, to exactly one address: the recipient in a valid claim, or the stored sender on a refund. No order of calls changes that, even if a stock token calls back into the vault during a transfer (C1).
+- A claim needs a signature by that gift's own key, over this vault, this chain, this gift and this recipient. A signature that fails to check never matches anything, and a signature cannot be replayed on another gift, vault, chain or recipient (C2).
+- No gift can exist that can be claimed without its key, shares a key with another gift, is empty, or locks tokens for more than 90 days (C3). Nobody else can make a sender's valid `createGift` fail by copying it, because the sender's address is bound into the key proof (C32).
+- For every token, the vault holds at least what its open gifts add up to. A gift records what the vault actually received (C4).
+- No one, the owner included, can move, redirect or permanently freeze a gift. Only Moi's relayer can submit a claim, and it still needs the gift's key signature (C5, C31).
+- A gift changes state only if its token transfer succeeds, and a misbehaving stock token can only affect gifts in that token (C6, C10).
+- The vault never releases a gift whose original sender the stock would currently refuse (C7).
+- A claim works only strictly before the expiry and a refund only at or after it, so a key that leaks after expiry is worthless (C8).
+- The note is encrypted under a key made from the claim key, so only the link holder can read it (C9).
+
+### The friend on the claim page
+
+- Claim keys come from the browser's secure random source, never from anything guessable (C11).
+- The key never appears in any network request: not to Moi, not to analytics, error reporting or logs, not to the wallet provider, and not in a sign-in redirect (C12). No page under `/g/` redirects to another site (C13).
+- Nothing a sender writes or a token reports can run as code on the page. Notes and token names show as plain text, and a Content Security Policy blocks inline script and every third-party script except the wallet provider's (C14).
+- The page shows a gift's contents only after checking that the key in the link produces the key address stored for that gift. A real gift number paired with a fake key shows "not valid" (C15).
+- A claim is sent only after the friend, signed in, taps "Open your gift". Loading the page never claims, even if a link scanner opens it. The recipient must be a plain wallet that the friend can export, never a contract. The page says "claimed" only when a confirmed receipt shows that gift claimed to that wallet (C16).
+- The wallet provider app accepts sessions only from Moi's own site and from localhost in development (C29). The longest gift lifetime is no longer than the time Moi commits to keep its domain, so a link opened after the domain changes hands has already expired (C28).
+- Claims and quotes are refused from the places the issuer restricts, and the friend declares they are not a US person and not in a restricted place (C30).
+
+### The sender signing transactions
+
+- Every transaction Moi hands a sender is checked as if the sender had typed it. It must be on chain 56. Approvals go only to the expected trading router or to the vault, for the exact amount and never unlimited. The swap's output must be the requested stock, sent to the sender, with a minimum output and a deadline. A quote that fails a check is refused, not repaired (C21).
+- Every token address Moi shows or uses is checked against the vault's own list on chain. Amounts are parsed once into whole units, and no floating-point number touches an amount (C22).
+- No swap is handed out until the dry run shows the wallet paying exactly the amount, receiving at least the minimum, and losing nothing else (C33). Gas limits and prices come from Moi's own rule, never from Binance's answer (C34).
+- The sender agent signs, approves or pays only what matches its own pinned values: the vault, USDT, the token list read from the vault, a fee ceiling and Moi's payout wallet. It trusts a mined transaction only when the chain's own copy carries exactly the data it built (C27, C48).
+
+### The gift wrap and the judge gifts
+
+- A gift is marked wrapped only after its payment has settled on chain for exactly the wrap price, in an accepted token, on chain 56, to Moi's payout wallet. The payment request is built from Moi's settings and the gift number, never from a header the caller sent (C24).
+- Settled means a confirmed receipt read from the chain with a transfer of the exact price. One transfer marks one gift, once, so a payment cannot be reused for another gift. A node on another chain marks nothing, and a payment is tied to the payer as well as the nonce (C42, C44, C45, C50).
+- A judge gets at most one gift, and a script cannot empty the pool. Each handout is atomic, a response carrying a gift is never cached, and the server signs the claim itself so no judge key ever leaves it (C26).
+
+### Moi's own wallet and quota
+
+- The relayer key signs only claims to the vault. It owns nothing else: it is not the vault owner, holds no token allowances, and is not the fee wallet (C17).
+- The relayer never broadcasts a claim that fails a dry run. It sends at most one claim per gift, with a fixed gas limit, a gas price ceiling, one nonce at a time and a daily spend cap. It refuses a claim when under 60 seconds remain before expiry (C18, C35, C36, C37, C39, C41, C47).
+- The Binance API key and secret, the relayer key and the judge keys never reach a browser, a log line, an error message or the repo. Binance's error text is replaced by Moi's own short code (C19, C40).
+- Anonymous input reaches Binance only as typed values of parameters Moi names. No input chooses a path, a host or a key in a signed body (C20).
+- Every route has a body cap and a rate limit, and every outside call has a timeout (C23, C49).
+- The store holds only values the server made. The server refuses to start without the shared store, or if the vault's relayer is not the address of its own relayer key (C25, C38, C43).
+- A client address or user id is stored or logged only as a keyed hash (C46).
+
+## What Moi does not defend against
+
+These are named on purpose. They are weaknesses Moi accepts, not rules it keeps.
+
+- N1. Someone who sees a link before the friend does. A link is like cash in an envelope: whoever claims first gets the gift. That includes the sender, who made the key.
+- N2. A compromised Moi deploy, hosting account or dependency. The link fragment keeps keys out of server logs. It does not protect against code the server sends to the claim page.
+- N3. The powers of the stock's issuer. The issuer can pause one token or all of them, and block or sanction any address, the vault included. One key can replace the code of every bStock. Gifts can freeze and Moi cannot override that. Whether the issuer can burn tokens held by the vault is unconfirmed. If a sender is blocked after gifting, that gift is frozen for both sides until the issuer lifts the block.
+- N4. Proving who the friend is. Moi does no ID check. The place check covers requests through Moi's relayer and honest declarations. It does not cover a VPN or a false declaration.
+- N5. The friend's account security at the wallet provider. If someone takes over the friend's email or Google account, they take the wallet.
+- N6. Market risk: price moves, slippage within the stated bound, and dividend changes through the multiplier.
+- N7. The sender agent's computer, and the Binance app's spending limits. Both are the sender's to secure.
+- N8. Lookalike phishing domains that send fake gift links.
+- N9. Privacy of everything except the key. The sender's address, the friend's address, the amount and the time are public on chain, and together they link the two wallets.
+
+## The attack record
+
+Two runs on 8 October 2026 attacked the rules above. All 60 attacks were refused.
+
+| Run | What it attacks | Result |
+|---|---|---|
+| Contract | The real vault on BNB Chain mainnet, on a fork of block 126,415,011 | 19 tests, 19 refused |
+| Server | The real API dispatcher, its handlers and the relayer, in process, against a fresh vault on an anvil fork of block 126,419,208 | 41 attacks, 41 refused |
+
+The contract run acts as the real owner, the real relayer, the stock issuer's own pause and blocklist operators and the Venus vNVDAB market for funding. It does this only on the fork. Nothing is signed for mainnet and no token moves on mainnet. The server run never reads `.env`, never touches the shared store, and exits 0 only when every attack was refused.
+
+The record lists each rule from C1 to C50, the attack run against it, where it ran and what came back. [Read the attack record on GitHub](https://github.com/ramakrishnanhulk20/Moi/blob/main/docs/security/attacks/README.md). To run the attacks yourself, see [Getting started](/docs/getting-started#run-the-attacks).
+
+What the record does not cover:
+
+- Where a rule is covered by an existing unit test, the record marks it PASS and names the test. It is not one of the 60. Two rules cannot be run as a script: C13 (no redirects under `/g/`) and C29 (the wallet provider's allowed sites, a setting in a third-party dashboard).
+- The server run uses fakes for three outside services: a Privy checker, a b402 payment service that does not check the buyer's signature, and a Binance API that replays recorded answers.
+- The website's pages, its Content Security Policy and its sign-in round trip are not attacked in these runs. The Google sign-in leg of the key check (C12) needs a real browser and Privy, so it is not in the scripted record.
+- The fork is a copy of mainnet at one block. It says nothing about what changes later, such as an upgrade by the stock's issuer.
+- The non-goals N1 to N9 are weaknesses, so they have no attack.
+
+## How the claim key is kept
+
+The claim key is the only thing that opens a gift, so it gets the most care.
+
+1. It is made in the sender's browser, or by the agent, from the secure random source. Only its public address goes on chain. The private key goes into the link, after the `#`.
+2. The part of a link after the `#` is called the fragment. Browsers do not send the fragment to any server, so the key does not reach Moi when the friend opens the link.
+3. On the claim page, the key is taken out of the address bar before the sign-in system loads. The page reads it and rewrites the address to `/g/<number>`, with nothing after it. This is done first because Privy sends the page address to its own server when Google sign-in starts.
+4. From then on the key lives only in that browser tab, in the tab's session storage under the gift's number. If the browser blocks storage, the key stays in memory only, and the page warns that a Google sign-in round trip would lose it and suggests email instead.
+5. The key signs the claim inside the browser. Only the signature, the gift number, the friend's wallet and the declaration go to Moi.
+6. When the receipt confirms the claim, the page erases the key from the tab.
+
+Other protections sit around this. The site sends `Referrer-Policy: no-referrer`, so the link never travels in a Referer header. No page redirects to another site. The Content Security Policy blocks inline script and limits where the page can send data.

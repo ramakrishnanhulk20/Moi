@@ -1,0 +1,135 @@
+---
+title: Getting started
+description: The short steps for a friend, a sender, a judge and a developer.
+---
+
+Pick the part that fits you. Each one stands on its own.
+
+## For a friend
+
+Someone sent you a link to a gift. You do not need a wallet, a seed phrase or any crypto.
+
+1. Open the whole link. It looks like `https://<site>/g/<number>#<key>`. If a chat app cut it short, the page says "This link doesn't open a gift" and the sender should copy it again, whole.
+2. Tap "Sign in to open it" and sign in with Google or email. Moi makes a wallet for you on BNB Chain. There is no seed phrase and no fee. You can export the wallet's key later.
+3. Tick the box that says you are not a US person and not in the US or a restricted region. The "Open your gift" button stays off until you do.
+4. Tap "Open your gift". Moi moves the share into your wallet and pays the network fee. BNB Chain usually confirms in a few seconds.
+5. You see "It's yours", the number of shares, the sender's note, and a link to the transaction on BscScan.
+
+If the gift has already been opened, taken back or has expired, the page says so. You pay nothing at any point.
+
+## For a sender
+
+You need a browser wallet such as MetaMask or the Binance Web3 Wallet, set to BNB Smart Chain. Hold USDT in it to pay for the share, and a little BNB for network fees. In the live runs a swap used 358,378 gas and locking a gift used 348,697 gas.
+
+1. Open the send page and connect your wallet.
+2. Pick one of the nine stocks and an amount from 1 to 100 US dollars. Write a note if you like, up to 483 bytes of text. It is sealed, so only the link can open it.
+3. Choose how long the gift stays open: 7, 30 or 90 days. The default is 30 days. The agent accepts any whole number of days from 1 to 90.
+4. Sign what your wallet asks, one step at a time:
+   - If it has not been done, allow the trading router to spend exactly your USDT amount.
+   - Sign the swap that buys the share.
+   - Allow the vault to take exactly the stock that arrived.
+   - Sign `createGift`, which locks the share in the vault.
+   - Sign the 5-cent gift wrap payment. It is paid in U, USD1, USDT or USDC. If you pay in USDT or USDC, your wallet may first ask you to approve exactly the fee for Permit2.
+5. The page shows your link as soon as the gift is locked, before the wrap payment. Copy it.
+
+Keep the link private. Anyone who holds the whole link can open the gift, like cash in an envelope. Send it by a message or an email to the one person you mean, and do not post it. The key never reaches Moi's servers, so Moi cannot send you the link again. If the friend never opens it, you can take the gift back after it expires.
+
+If you would rather send from the command line, use [the sender agent](/docs/agent).
+
+## For a judge
+
+The judges section on the home page gives each judge one real stock gift of about one US dollar. The gifts were made from Moi's own wallet before judging, and Moi's relayer delivers them with no wrapping fee.
+
+1. Open the judges section on the home page.
+2. Sign in with Google or email. Moi makes a wallet for you.
+3. Type the judge code from our submission.
+4. Tick the declaration that you are not a US person and not in a restricted place.
+5. Tap the button. Your wallet signs a short message that proves the wallet is yours, and Moi sends the request. The gift lands in your new wallet, and Moi pays the network fee.
+
+Each judge gets one gift. Moi allows one gift per sign-in for 30 days, and one gift per network a day. More than five wrong codes in a minute from one network are refused for that minute. If every judge gift has been handed out, the page says "All the judge gifts have been handed out. Ask the Moi team for another."
+
+To check the result, look at the transaction on BscScan. You will see the vault's `GiftClaimed` event for a gift number and your new wallet as the recipient.
+
+## For a developer
+
+### What you need
+
+- Node 22 or newer, and npm. The counts below were run on Node 26.7.0 and npm 11.19.0.
+- Foundry for the contracts. The counts below were run on forge 1.8.1. The vault is Solidity 0.8.28, and `install-deps.sh` installs OpenZeppelin v5.7.0 and forge-std v1.17.0.
+
+### Clone and install
+
+```bash
+git clone https://github.com/ramakrishnanhulk20/Moi.git
+cd Moi
+npm install
+```
+
+### Run the tests
+
+```bash
+npm test
+cd packages/contracts && sh install-deps.sh && forge test
+```
+
+Counts on 8 October 2026:
+
+| Suite | Result |
+|---|---|
+| `packages/core` | 462 passed, 3 skipped |
+| `packages/agent` | 59 passed |
+| `packages/contracts` (forge) | 127 passed in 8 suites, 0 failed |
+
+`npm test` type-checks first and then runs the core and agent tests. The 3 skipped core tests are fork tests. Turn them on by setting `MOI_FORK_TESTS=1`. Then `npm run test:fork --workspace=@moi/core` runs the claim fork test, and `npx vitest run test/prove.fork.test.ts` from `packages/core` runs the prove fork test. Both need Foundry's `anvil` and network access. The forge run includes 10 fork tests and 19 attack tests that read BNB Chain mainnet through the nodes named in `foundry.toml`, so it needs a network connection. The forge fuzz tests run 10,000 cases each.
+
+### Prove it against the live network
+
+```bash
+npm run prove
+```
+
+This is a dry run. It prints the plan for buying 1 USDT of NVDAB, lists the tokens the vault accepts, and signs nothing. To spend real money on BNB Chain, run `MOI_LIVE=1 npm run prove`. That buys 1 USDT of NVDAB, gifts it, claims it into a brand-new wallet through the relayer, and checks every step on chain. Both modes read the full environment first, so fill in `.env` as described below.
+
+`npm run slice` is a smaller dry run: a live quote, the checks and the simulations, with nothing signed.
+
+### Run the attacks
+
+```bash
+cd packages/contracts && forge test --match-path "test/attacks/*" --fork-url https://bsc-dataseed.bnbchain.org -vvv
+npm run attacks --workspace=@moi/core
+```
+
+The first command attacks the real vault on a fork of mainnet: 19 attacks. The second attacks the server code in process against a fresh vault on an anvil fork: 41 attacks. Foundry's `anvil` and a built `packages/contracts/out` must exist, and the run forks from Blast's public archive node. Set `MOI_ATTACK_FORK_URL` to use another archive node. Both runs refuse every attack. The [security page](/docs/security) explains what they cover.
+
+### Environment variables
+
+Copy `.env.example` to `.env` at the repo root and fill it in. Never commit it. The table gives names only.
+
+| Name | What it is for | Where you get it |
+|---|---|---|
+| `OC_API_KEY`, `OC_SECRET_KEY` | Your credentials for the Binance Web3 API. Moi signs every request to Binance with them. | The Binance Web3 API developer portal, at web3.binance.com/en/dev-portal |
+| `DEPLOYER_PRIVATE_KEY` | Deploys the vault and acts as the test sender in scripts. Fund it with a little BNB and USDT on BNB Smart Chain. | A new wallet you make for this |
+| `RELAYER_PRIVATE_KEY` | Sends claims and pays their gas. It holds nothing else. Fund it with a little BNB. | A second new wallet |
+| `ETHERSCAN_API_KEY` | Verifies the vault on BscScan. | A key from etherscan.io/myapikey. The free plan refused BNB Chain when checked on 7 October 2026, and Sourcify verification needs no key |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | The Privy app that signs the friend in. It is public, not a secret, and exactly 25 characters. | An app created at dashboard.privy.io |
+| `MOI_RELAYER_ADDRESS` | The public address of the relayer wallet. The deploy script reads it so it never needs the relayer key. | The address of the relayer wallet |
+| `MOI_OWNER_ADDRESS` | The wallet that will own the vault. The deploy offers ownership to it, and it accepts with one signature. Required for a mainnet deploy. | The address of a wallet you control |
+| `MOI_VAULT_ADDRESS` | The deployed vault. The live one is `0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C`. | The output of the deploy |
+| `MOI_RELAYER_MAX_GAS_PRICE_WEI`, `MOI_RELAYER_DAILY_CAP_WEI` | Optional relayer limits. The defaults are 3 gwei and 0.002 BNB a day. | You choose them |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | The shared store that remembers claimed gifts, locks and judge handouts. Set both or neither. | A free Upstash Redis database, in Singapore or Frankfurt |
+| `MOI_WRAP_PRICE_USD` | The gift wrap fee. The default is 0.05, and the most allowed is 1 dollar. | You choose it |
+| `MOI_PAYOUT_ADDRESS` | The wallet the wrap fees settle to. | The payout wallet you set in your b402 application |
+| `MOI_SPONSOR_ADDRESS` | The wallet that makes the judge gifts. The relayer delivers its gifts with no wrapping fee. | A wallet you control |
+| `MOI_PUBLIC_ORIGIN` | The site address printed in gift links. Use https in production. The example is `http://localhost:3000`. | Your site address |
+| `MOI_SERVER_ORIGIN` | Where the sender agent reaches Moi's server to wrap gifts. | Your site address |
+| `MOI_JUDGE_SEED` | A secret 32-byte seed, written as 0x and 64 hex characters, that the server derives each judge gift's claim key from. | Any secure random generator. Keep it secret |
+| `MOI_JUDGE_POOL` | The judge gifts the server may hand out, as `giftId:index` pairs. | Printed by `npm run judge-gifts --workspace=@moi/core` |
+| `MOI_JUDGE_COUNT`, `MOI_JUDGE_STOCK`, `MOI_JUDGE_USD_EACH` | How many judge gifts to make, which stock token, and how many dollars each. The defaults are 10, NVDAB and 1. | You choose them |
+| `MOI_JUDGE_START` | Resumes a stopped judge-gift run from this key index. The default is 0. | You choose it |
+| `MOI_JUDGE_CODE` | The code judges type on the judge button. | You choose it. The server checks its format |
+| `BSC_RPC_URL` | Optional. The BNB Smart Chain node to use. It must be https. The default is `https://bsc-dataseed.bnbchain.org`. | Any BNB Chain node provider |
+| `MOI_ALLOW_MEMORY_STORE`, `MOI_DEV_COUNTRY`, `MOI_DEV_ALLOW_UNKNOWN_COUNTRY`, `PORT` | Local development only. Set `MOI_ALLOW_MEMORY_STORE=1` to run without Upstash in a single process. `MOI_DEV_COUNTRY` is the country a local request claims. `PORT` is for `npm run serve`. | You choose them |
+
+Three switches change what a script does: `MOI_LIVE=1` for `prove` and `slice`, `MOI_FORK_TESTS=1` for the fork tests, and `MOI_ATTACK_FORK_URL` for the attack run.
+
+To run the website on your machine, use `npm run dev --workspace=@moi/web`. It serves on `http://127.0.0.1:3000`.

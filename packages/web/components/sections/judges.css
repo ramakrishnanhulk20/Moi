@@ -1,0 +1,811 @@
+/* The judges section */
+.judges {
+  position: relative;
+  overflow: clip;
+  isolation: isolate;
+  padding: 88px clamp(16px, 4vw, 56px);
+  background: var(--bg);
+}
+
+.judges-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 40px;
+}
+
+.judges-text,
+.judges-steps {
+  min-width: 0;
+}
+
+.judges-label {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 12px/1.4 var(--font-mono);
+  letter-spacing: 0.18em;
+}
+
+.judges-title {
+  margin: 16px 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 5vw, 4.5rem);
+  font-weight: 900;
+  line-height: 0.95;
+}
+
+.judges-title-italic {
+  color: var(--gold);
+  font-style: italic;
+}
+
+.judges-body {
+  max-width: 42ch;
+  margin: 24px 0 0;
+  color: var(--ink-muted);
+  font: 400 18px/1.55 var(--font-body);
+}
+
+.judges-ticket {
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .judges {
+    padding-block: 140px;
+  }
+
+  .judges-grid {
+    grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+    grid-template-areas:
+      "text ticket"
+      "steps ticket";
+    column-gap: 4vw;
+    align-content: center;
+    align-items: start;
+  }
+
+  .judges-text {
+    grid-area: text;
+  }
+
+  .judges-steps {
+    grid-area: steps;
+  }
+
+  /* Pinned from the top, not centred, so the ticket stays still while the claiming and error blocks grow the column beside it. */
+  .judges-ticket {
+    grid-area: ticket;
+    align-self: start;
+    justify-self: center;
+    margin-top: clamp(120px, 14vw, 220px);
+  }
+}
+
+/* The ticket. --u is one 520th of the ticket's width, so 1 * var(--u) is 1px on desktop and shrinks with the ticket on a phone. */
+.jt {
+  --u: calc(100cqw / 520);
+  --notch: calc(var(--u) * 14);
+  --ticket-ink: #1a1012;
+  --ticket-muted: #6b5b4f;
+  --notch-left: radial-gradient(circle var(--notch) at 0 0, transparent calc(var(--notch) - 0.5px), #000 var(--notch)),
+    radial-gradient(circle var(--notch) at 0 100%, transparent calc(var(--notch) - 0.5px), #000 var(--notch));
+  --notch-right: radial-gradient(circle var(--notch) at 100% 0, transparent calc(var(--notch) - 0.5px), #000 var(--notch)),
+    radial-gradient(circle var(--notch) at 100% 100%, transparent calc(var(--notch) - 0.5px), #000 var(--notch));
+  container-type: inline-size;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 520 / 240;
+}
+
+@media (min-width: 1024px) {
+  .jt {
+    width: 520px;
+  }
+}
+
+.jt-tilt {
+  position: absolute;
+  inset: 0;
+  transform: perspective(calc(var(--u) * 1200)) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) rotate(-3deg);
+}
+
+.jt-stub,
+.jt-body {
+  position: absolute;
+  top: 0;
+  height: 100%;
+}
+
+.jt-stub {
+  left: 0;
+  width: calc(var(--u) * 132);
+}
+
+.jt-body {
+  left: calc(var(--u) * 132);
+  width: calc(var(--u) * 388);
+  perspective: calc(var(--u) * 1200);
+}
+
+/* The shadow is its own layer so it can pulse without repainting the paper. Its colour is 0.7 and its opacity rests at 0.714, which makes the resting shadow 0.5. */
+.jt-shadow {
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--u) * 8);
+  box-shadow: 0 calc(var(--u) * 30) calc(var(--u) * 80) rgba(0, 0, 0, 0.7);
+  opacity: 0.714;
+  pointer-events: none;
+}
+
+.jt[data-phase="claiming"] .jt-shadow {
+  animation: jt-pulse 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes jt-pulse {
+  from {
+    opacity: 0.714;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.jt-flip {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.jt-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background: var(--ink);
+  color: var(--ticket-ink);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+.jt-stub-face {
+  border-radius: calc(var(--u) * 8) 0 0 calc(var(--u) * 8);
+  -webkit-mask-image: var(--notch-right);
+  mask-image: var(--notch-right);
+}
+
+.jt-front {
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--u) * 28);
+  border-radius: 0 calc(var(--u) * 8) calc(var(--u) * 8) 0;
+  -webkit-mask-image: var(--notch-left);
+  mask-image: var(--notch-left);
+}
+
+/* The back is turned half a revolution inside a body that also turns half a revolution, so it reads upright and its notched edge faces the stub. */
+.jt-back {
+  border-radius: 0 calc(var(--u) * 8) calc(var(--u) * 8) 0;
+  background: var(--maroon);
+  color: var(--ink);
+  transform: rotateY(180deg);
+  -webkit-mask-image: var(--notch-left);
+  mask-image: var(--notch-left);
+}
+
+/* The perforation: 2px dashes with 6px gaps, between the notches */
+.jt-stub-face::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--u) * 20);
+  right: 0;
+  bottom: calc(var(--u) * 20);
+  width: calc(var(--u) * 2);
+  background: repeating-linear-gradient(to bottom, rgba(26, 16, 18, 0.3) 0, rgba(26, 16, 18, 0.3) calc(var(--u) * 2), transparent calc(var(--u) * 2), transparent calc(var(--u) * 8));
+}
+
+.jt-v {
+  position: absolute;
+  top: calc(var(--u) * 30);
+  left: 50%;
+  width: calc(var(--u) * 22);
+  height: auto;
+  color: var(--maroon);
+  transform: translateX(-50%);
+}
+
+.jt-admit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: var(--ticket-ink);
+  font: 400 calc(var(--u) * 12) / 1 var(--font-mono);
+  letter-spacing: 0.3em;
+  white-space: nowrap;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+.jt-presents {
+  margin: 0;
+  color: var(--ticket-muted);
+  font: 400 calc(var(--u) * 11) / 1.4 var(--font-mono);
+  letter-spacing: 0.22em;
+}
+
+.jt-title {
+  margin: calc(var(--u) * 12) 0 0;
+  color: var(--ticket-ink);
+  font-family: var(--font-display);
+  font-size: calc(var(--u) * 34);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.jt-fine {
+  margin: calc(var(--u) * 14) 0 0;
+  color: var(--ticket-muted);
+  font: 400 calc(var(--u) * 11) / 1.4 var(--font-mono);
+}
+
+.jt-number {
+  margin: auto 0 0;
+  align-self: flex-end;
+  color: var(--ticket-muted);
+  font: 400 calc(var(--u) * 10) / 1.4 var(--font-mono);
+}
+
+.jt-number-skeleton {
+  display: block;
+  width: calc(var(--u) * 56);
+  height: calc(var(--u) * 10);
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(26, 16, 18, 0.1) 0%, rgba(26, 16, 18, 0.22) 50%, rgba(26, 16, 18, 0.1) 100%);
+  background-size: 200% 100%;
+  animation: jt-shimmer 1.4s linear infinite;
+}
+
+@keyframes jt-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* The back: a gold double rule, 1px and 0.5px, 6px apart, 10px in from the edge */
+.jt-back::before,
+.jt-back::after {
+  content: "";
+  position: absolute;
+  border: solid var(--gold);
+  pointer-events: none;
+}
+
+.jt-back::before {
+  inset: calc(var(--u) * 10);
+  border-width: 1px;
+}
+
+.jt-back::after {
+  inset: calc(var(--u) * 16);
+  border-width: 0.5px;
+}
+
+.jt-back-inner {
+  position: absolute;
+  inset: calc(var(--u) * 22);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  text-align: center;
+}
+
+.jt-own {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 calc(var(--u) * 11) / 1.4 var(--font-mono);
+}
+
+.jt-figure {
+  max-width: 100%;
+  margin: calc(var(--u) * 6) 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: min(calc(var(--u) * 40), calc(var(--u) * 560 / var(--len, 14)));
+  font-weight: 900;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.jt-figure-title {
+  font-size: calc(var(--u) * 34);
+}
+
+.jt-holding {
+  margin: calc(var(--u) * 4) 0 0;
+  color: var(--ink);
+  font: 400 calc(var(--u) * 15) / 1.3 var(--font-body);
+  overflow-wrap: anywhere;
+}
+
+.jt-link {
+  position: relative;
+  margin-top: calc(var(--u) * 14);
+  padding: calc(var(--u) * 4) 0;
+  color: var(--gold);
+  font: 400 calc(var(--u) * 11) / 1.2 var(--font-mono);
+}
+
+.jt-link::before {
+  content: "";
+  position: absolute;
+  inset: -12px -16px;
+}
+
+.jt-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 250ms ease-out;
+}
+
+.jt-link:hover::after {
+  transform: scaleX(1);
+}
+
+.judges .jt-link:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.jt[data-phase="idle"] .jt-back,
+.jt[data-phase="claiming"] .jt-back {
+  pointer-events: none;
+}
+
+/* On a phone or tablet there is little room left of the ticket, so the whole ticket shrinks a little as the stub tears away and stays on screen. */
+@media (max-width: 1023px) {
+  .jt-tilt {
+    transform-origin: 100% 50%;
+    transition: scale 600ms cubic-bezier(0.165, 0.84, 0.44, 1);
+  }
+
+  .jt[data-phase="done"] .jt-tilt {
+    scale: 0.9;
+  }
+}
+
+/* Reduced motion: no tilt, no pulse, no flip. The stub sits apart and the front cross-fades to the back over 200 ms. */
+@media (prefers-reduced-motion: reduce) {
+  .jt-tilt {
+    transform: rotate(-3deg);
+    transition: none;
+  }
+
+  .jt[data-phase="claiming"] .jt-shadow,
+  .jt-number-skeleton {
+    animation: none;
+  }
+
+  .jt-face {
+    backface-visibility: visible;
+    -webkit-backface-visibility: visible;
+  }
+
+  .jt-back {
+    transform: none;
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+
+  .jt-front {
+    transition: opacity 200ms ease;
+  }
+
+  .jt[data-phase="done"] .jt-front {
+    opacity: 0;
+  }
+
+  .jt[data-phase="done"] .jt-back {
+    opacity: 1;
+  }
+
+  .jt[data-phase="done"] .jt-stub {
+    transform: translateX(-28px) rotate(-10deg);
+  }
+
+  .jt-link::after {
+    transition: none;
+  }
+}
+
+/* The steps */
+.judges-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  transition: opacity 250ms ease-out;
+}
+
+.judges-steps-list[data-locked="true"] {
+  opacity: 0.4;
+}
+
+.judges-step {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: start;
+}
+
+.judges-step-number {
+  display: flex;
+  align-items: center;
+  height: var(--first-h);
+  color: var(--gold);
+  font: 400 12px/1 var(--font-mono);
+}
+
+.judges-step-body {
+  min-width: 0;
+}
+
+.judges-quiet,
+.judges-who,
+.judges-unavailable {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  min-height: 44px;
+  margin: 0;
+  font: 400 14px/1.5 var(--font-body);
+  overflow-wrap: anywhere;
+}
+
+.judges-quiet,
+.judges-who {
+  align-items: center;
+  color: var(--ink-muted);
+}
+
+.judges-unavailable {
+  align-items: center;
+  color: var(--error);
+}
+
+.judges-nowrap {
+  white-space: nowrap;
+}
+
+/* Buttons */
+.judges-secondary,
+.judges-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.judges-secondary {
+  height: 44px;
+  padding-inline: 20px;
+  border: 1px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
+  font: 600 15px/1.2 var(--font-body);
+  transition:
+    background-color 150ms,
+    color 150ms;
+}
+
+.judges-secondary:not(:disabled):hover {
+  background: var(--gold);
+  color: var(--bg);
+}
+
+.judges-secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.judges-primary {
+  width: calc(100% - 40px);
+  max-width: 360px;
+  height: 52px;
+  margin: 32px 0 0 40px;
+  border: 0;
+  background: var(--gold);
+  color: var(--bg);
+  font: 600 16px/1.2 var(--font-body);
+  transition: background-color 150ms;
+}
+
+.judges-primary:not(:disabled):hover {
+  background: var(--gold-deep);
+}
+
+.judges-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.judges .judges-secondary:focus-visible,
+.judges .judges-primary:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Text buttons: gold, with an underline that draws from the left on hover */
+.judges-link {
+  position: relative;
+  display: inline-block;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--gold);
+  font: 600 15px/1.4 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.judges-link-small {
+  font-size: 14px;
+}
+
+.judges-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 250ms ease-out;
+}
+
+.judges-link:hover::after {
+  transform: scaleX(1);
+}
+
+.judges .judges-link:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* The judge code field */
+.judges-input {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  height: 48px;
+  padding-inline: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--ink);
+  font: 400 16px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  transition: border-color 150ms;
+}
+
+.judges-input::placeholder {
+  color: var(--ink-muted);
+  letter-spacing: 0.08em;
+  opacity: 1;
+}
+
+.judges-input:hover {
+  border-color: var(--ink-muted);
+}
+
+.judges .judges-input:focus,
+.judges .judges-input:focus-visible {
+  border-color: var(--gold);
+  outline: none;
+  box-shadow: none;
+}
+
+.judges-hint {
+  margin: 8px 0 0;
+  color: var(--ink-muted);
+  font: 400 13px/1.5 var(--font-body);
+}
+
+/* The declaration checkbox */
+.judges-check {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: var(--ink);
+  font: 400 15px/1.45 var(--font-body);
+  cursor: pointer;
+}
+
+.judges-check-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.judges-check-box {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--bg);
+  transition:
+    border-color 150ms,
+    background-color 150ms;
+}
+
+.judges-check-box svg {
+  opacity: 0;
+}
+
+.judges-check:hover .judges-check-box {
+  border-color: var(--ink-muted);
+}
+
+.judges-check-input:checked + .judges-check-box {
+  border-color: var(--gold);
+  background: var(--gold);
+}
+
+.judges-check-input:checked + .judges-check-box svg {
+  opacity: 1;
+}
+
+.judges-check:hover .judges-check-input:checked + .judges-check-box {
+  border-color: var(--gold-deep);
+  background: var(--gold-deep);
+}
+
+.judges .judges-check-input:focus-visible + .judges-check-box {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Claiming, failed and done: each rises in when it appears */
+.judges-status,
+.judges-error,
+.judges-done {
+  animation: judges-rise 500ms cubic-bezier(0.165, 0.84, 0.44, 1) both;
+}
+
+@keyframes judges-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes judges-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.judges-status {
+  max-width: 440px;
+  margin: 24px 0 0 40px;
+}
+
+.judges-status-title {
+  margin: 0;
+  color: var(--ink);
+  font: 600 22px/1.2 var(--font-display);
+}
+
+.judges-status-body {
+  margin: 8px 0 0;
+  color: var(--ink-muted);
+  font: 400 15px/1.55 var(--font-body);
+}
+
+.judges-timer {
+  margin: 16px 0 0;
+  color: var(--ink);
+  font: 400 13px/1 var(--font-mono);
+}
+
+.judges-status .judges-hint {
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.judges-error {
+  max-width: 440px;
+  margin: 24px 0 0 40px;
+  padding: 16px;
+  border: 1px solid var(--error);
+  border-radius: 8px;
+}
+
+.judges-error-title {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font: 600 20px/1.3 var(--font-display);
+}
+
+.judges-error-body {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 15px/1.55 var(--font-body);
+  overflow-wrap: anywhere;
+}
+
+.judges-error .judges-link {
+  margin-top: 12px;
+}
+
+.judges-done-title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.judges-done-body {
+  max-width: 42ch;
+  margin: 16px 0 0;
+  color: var(--ink);
+  font: 400 16px/1.55 var(--font-body);
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .judges-status,
+  .judges-error,
+  .judges-done {
+    animation: judges-fade 200ms ease both;
+  }
+
+  .judges-steps-list,
+  .judges-secondary,
+  .judges-primary,
+  .judges-input,
+  .judges-check-box {
+    transition: none;
+  }
+
+  .judges-link::after {
+    transition: none;
+  }
+}

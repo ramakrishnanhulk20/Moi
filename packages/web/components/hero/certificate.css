@@ -1,0 +1,166 @@
+/* The certificate. Shared by the hero and the claim page. */
+.cert {
+  --m: 1;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 880 / 568;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+
+.cert-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cert-paper {
+  fill: var(--maroon);
+}
+
+.cert-frame {
+  fill: none;
+  stroke: var(--gold);
+  vector-effect: non-scaling-stroke;
+}
+
+.cert-frame-outer {
+  stroke-width: 1.5px;
+}
+
+.cert-frame-inner {
+  stroke-width: 0.75px;
+}
+
+.cert-frame-edge {
+  stroke-width: 0.75px;
+  stroke-opacity: 0.6;
+}
+
+.cert-guilloche {
+  fill: none;
+  stroke: var(--gold);
+  stroke-opacity: 0.35;
+  stroke-width: 0.75px;
+}
+
+.cert-vmark,
+.cert-seal-v {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cert-vmark {
+  stroke: var(--gold);
+  stroke-width: 2.2px;
+}
+
+.cert-seal-v {
+  stroke: var(--maroon);
+  stroke-width: 2.4px;
+}
+
+.cert-seal-ring {
+  fill: none;
+  stroke: var(--maroon);
+  stroke-width: 0.75px;
+  stroke-opacity: 0.7;
+}
+
+.cert-seal-text {
+  fill: var(--maroon);
+  font: 600 8.5px var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+.cert-moi {
+  fill: var(--gold);
+  font-family: var(--font-display);
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: 0.3em;
+}
+
+.cert-mono {
+  fill: var(--ink-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.22em;
+}
+
+.cert-mono-10 {
+  font-size: calc(10px * var(--m));
+  letter-spacing: 0.12em;
+}
+
+.cert-mono-11 {
+  font-size: calc(11px * var(--m));
+}
+
+.cert-mono-12 {
+  font-size: calc(12px * var(--m));
+}
+
+.cert-mono-13 {
+  font-size: calc(13px * var(--m));
+}
+
+.cert-figure {
+  fill: var(--ink);
+  font-family: var(--font-display);
+  font-size: 56px;
+  font-weight: 900;
+}
+
+.cert-hand {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: calc(2.3px * var(--m));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* --hand-len is the pen stroke's length, measured once in Certificate. The gap is twice the dash so a
+     round cap never shows at the end of the stroke while it is still hidden. */
+  stroke-dasharray: calc(var(--hand-len, 1000) * 1px) calc(var(--hand-len, 1000) * 2px);
+  /* The claim page sets --hand (0 to 1) on its stage. The hero sets only --p, and the pen follows it. */
+  stroke-dashoffset: calc(var(--hand-len, 1000) * 1px * (1 - var(--hand, clamp(0, (var(--p) - 0.62) * 5, 1))));
+}
+
+.cert-sheen {
+  --sheen: -40%;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    35deg,
+    transparent calc(var(--sheen) - 15%),
+    rgba(255, 255, 255, 0.12) var(--sheen),
+    transparent calc(var(--sheen) + 15%)
+  );
+  opacity: clamp(0, (var(--hand, var(--p)) - 0.85) * 20, 1);
+  pointer-events: none;
+}
+
+.skeleton-svg {
+  fill: rgba(246, 239, 230, 0.16);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 767px) {
+  .cert {
+    --m: 1.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-svg {
+    animation: none;
+  }
+}

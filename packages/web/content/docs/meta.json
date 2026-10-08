@@ -1,0 +1,15 @@
+{
+  "title": "Moi",
+  "pages": [
+    "index",
+    "how-it-works",
+    "getting-started",
+    "---For senders and judges---",
+    "agent",
+    "faq",
+    "---For builders---",
+    "contracts",
+    "api",
+    "security"
+  ]
+}

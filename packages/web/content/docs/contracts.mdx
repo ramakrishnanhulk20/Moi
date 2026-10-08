@@ -1,0 +1,123 @@
+---
+title: Contracts
+description: The GiftVault on BNB Chain, function by function, and what its owner can and cannot do.
+---
+
+Moi has one contract, `GiftVault`. It holds gifted stock tokens until the link's key claims them through Moi's relayer, or the sender takes them back after the gift expires. It has no upgrade path, so the code at the address below is the code that runs.
+
+| Thing | Value |
+|---|---|
+| Chain | BNB Smart Chain mainnet, chain id 56 |
+| GiftVault | [0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C](https://bscscan.com/address/0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C) |
+| Source | [packages/contracts/src/GiftVault.sol](https://github.com/ramakrishnanhulk20/Moi/blob/main/packages/contracts/src/GiftVault.sol), Solidity 0.8.28, built on OpenZeppelin v5.7.0 |
+| Verification | Sourcify reports an exact match for both the creation and the runtime code, verified on 7 October 2026 |
+| Owner | 0x96E854aBDdc5C618ca843956d1303017b586aB75 |
+| Relayer | 0x93596EBf4e4B3ACEAb8Af2B4FeA6157e3F7fb7A9 |
+
+The owner and relayer above were read from the chain on 8 October 2026, at block 126,426,962. At that block the vault was not paused. You can check the Sourcify match yourself:
+
+```bash
+curl https://sourcify.dev/server/v2/contract/56/0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C
+```
+
+## The stocks you can give
+
+Read the live list with `listedTokens()`. On 8 October 2026 it held nine bStocks, all with 18 decimals.
+
+| Ticker | Name as the token reports it | Token address |
+|---|---|---|
+| AAPLB | Apple | `0x431a3BEE82E2ca41e49895CbECE5bB0F76A89b7A` |
+| NVDAB | NVIDIA Corp | `0x02Fca66C1D1aFB4E2A7884261eB00F63598a7436` |
+| TSLAB | Tesla, Inc. | `0x5b1910eAaD6450E50f816082Aa078C41F10C292f` |
+| MSFTB | Microsoft | `0x80106cb3EAD06659A5ad19DF39D9b4733863B9b0` |
+| AMZNB | Amazon | `0x1a4b499833A79A09ad7Cf1D42D7DacF71e92eb00` |
+| GOOGLB | Alphabet | `0x3F53De71c126BdaBAe20f9cD64848d317f6C3238` |
+| METAB | Meta Platforms | `0x7425889FE94F9d693E8daefE88BCCed6AcFEf4c0` |
+| SPYB | SPY | `0x7138b48df7D98D7e3cc221BfE7192D0a178182D8` |
+| QQQB | Invesqo QQQ | `0x205812CdBed920aFf76C6580abD681a46D11efc7` |
+
+The list can hold at most 32 tokens. The vault's list is the only list: Moi's server and pages read it from the chain and keep no copy.
+
+## A gift, as the vault stores it
+
+`getGift(giftId)` returns the token, the sender, the claim key's address, the expiry as Unix seconds, the state, the amount in raw token units, and the sealed note. The state is `None` (0) for an id that was never made, then `Open` (1), `Claimed` (2) or `Refunded` (3). Gift numbers start at 1. A note is stored as ciphertext of at most 512 bytes. The amount is what the vault actually received, measured from its own balance, not the amount the sender asked for.
+
+## The functions
+
+### Anyone can call
+
+| Function | What it does | What makes it revert |
+|---|---|---|
+| `createGift(address token, uint256 amount, address claimKey, uint64 expiry, bytes sealedNote, bytes keyProof)` | Locks `amount` of a listed token from the caller as a new gift. The holder of the claim key can claim it before `expiry`, and the caller can take it back from `expiry` on. The caller must first approve the vault for `amount`. | The vault is paused. The token is not listed. The amount is zero. The claim key is zero or was used by an earlier gift. The expiry is less than 1 hour or more than 90 days from now, which also catches milliseconds passed as seconds. The note is over 512 bytes. The key proof is not a valid signature by the claim key over the caller's address. The vault received nothing. The token's own transfer fails. |
+| `refund(uint256 giftId)` | Returns an expired, unclaimed gift to the sender stored in the gift. It does not matter who calls. | The gift is not open. The expiry has not been reached. The token's own transfer fails. |
+| `claimDigest(uint256 giftId, address recipient)` | A read-only helper. It returns the digest a claim key signs to release a gift to a recipient. | Never. |
+| `registerDigest(address sender)` | A read-only helper. It returns the digest a claim key signs so that one sender can create a gift with it. | Never. |
+| `getGift(uint256 giftId)` | Reads a gift record. | Never. |
+| `listedTokens()` | Reads every listed token. | Never. |
+| `senderIsCompliant(uint256 giftId)` | Says whether the stock's own compliance contract would accept the gift's original sender right now, the same test `claim` runs. | Never. A gift that does not exist gives false. |
+
+Public readers also exist for `nextGiftId`, `relayer`, `owner`, `pendingOwner`, `paused`, `isListed(token)`, `liabilities(token)` and `claimKeyUsed(address)`. `liabilities(token)` is the sum of the open gifts in that token, in raw units. The constants are `MAX_NOTE_BYTES` (512), `MIN_LIFETIME` (1 hour), `MAX_LIFETIME` (90 days) and `MAX_TOKENS` (32).
+
+### Only the relayer can call
+
+| Function | What it does | What makes it revert |
+|---|---|---|
+| `claim(uint256 giftId, address recipient, bytes signature)` | Pays an open gift to `recipient`. The signature must be by the gift's claim key, over this vault, this chain, this gift and this recipient. | The caller is not the relayer. The vault is paused. The gift is not open. The gift has expired. The recipient is the zero address or the vault itself. The signature is malformed or not the claim key's. The gift's original sender is not compliant. The token's own transfer fails. |
+
+A relayer that is compromised still cannot claim any gift without that gift's claim-key signature. The worst it can do is refuse to claim, and then the sender takes the gift back after expiry.
+
+### Only the owner can call
+
+| Function | What it does | What makes it revert |
+|---|---|---|
+| `setTokenListed(address token, bool listed)` | Adds a token to the list new gifts may use, or removes it. | The caller is not the owner. The token is the zero address. The list already holds 32 tokens. |
+| `setRelayer(address newRelayer)` | Replaces the one address allowed to submit claims. | The caller is not the owner. The address is zero. |
+| `pause()` and `unpause()` | Stops or resumes new gifts and claims. Refunds keep working. | The caller is not the owner. The vault is already in that state. |
+| `rescueSurplus(address token, address to)` | Sends out only the tokens held above what open gifts owe, such as tokens sent to the vault by mistake. | The caller is not the owner. An address is zero. There is nothing above what open gifts owe. |
+| `transferOwnership(address newOwner)` and `acceptOwnership()` | Moves ownership in two steps. The new owner must accept. | The caller is not allowed to do that step. |
+| `renounceOwnership()` | Always reverts. | Always. An owner-less vault left paused could never be unpaused. |
+
+## The events
+
+| Event | When it is emitted |
+|---|---|
+| `GiftCreated(uint256 indexed giftId, address indexed token, address indexed sender, address claimKey, uint256 amount, uint64 expiry)` | A gift was locked. `amount` is what the vault received. |
+| `GiftClaimed(uint256 indexed giftId, address indexed recipient, uint256 amount)` | A gift was paid to the recipient its claim key signed for. |
+| `GiftRefunded(uint256 indexed giftId, address indexed sender, uint256 amount)` | An expired gift went back to its sender. |
+| `TokenListed(address indexed token, bool listed)` | A token was added to or removed from the list. |
+| `RelayerSet(address indexed previousRelayer, address indexed newRelayer)` | The relayer changed. |
+| `SurplusRescued(address indexed token, address indexed to, uint256 amount)` | Tokens above what open gifts owe were sent out. |
+
+The vault also emits OpenZeppelin's standard `Paused`, `Unpaused`, `OwnershipTransferStarted` and `OwnershipTransferred` events.
+
+## What the owner can and cannot do
+
+The owner has three powers: pause and unpause new gifts and claims, edit the token list, and set the relayer. It can also send out tokens above what open gifts owe, and hand ownership to someone else in two steps.
+
+No one, the owner included, can move a gift. The owner cannot claim a gift without its claim key, even after making itself the relayer. It cannot refund early, cannot change an expiry, and cannot upgrade the contract. Pausing or delisting a stock never blocks a refund after expiry, and delisting never blocks a claim on a gift that already exists. Rescue can only take a surplus, never a gift's balance.
+
+The [attack record](/docs/security#the-attack-record) shows the live owner trying each of these on a fork of mainnet and being refused.
+
+## Expiry and taking a gift back
+
+A gift's expiry must be from 1 hour to 90 days after it is created. Moi's website and agent default to 30 days. Claim and refund share one boundary on block time. A claim works only strictly before the expiry, and a refund works only at or after it, so a key that leaks after expiry is worthless.
+
+After the expiry, anyone can call `refund(giftId)`. The tokens always go to the sender stored in the gift, never to the caller. Moi's relayer also refuses a claim when less than 60 seconds remain before expiry, so it never pays for a claim that would land too late.
+
+## The compliance check on the sender
+
+bStocks ask a compliance contract about the parties to every transfer. A claim moves tokens from the vault to the friend, so the token would never check the original sender again. The vault does it. At the moment of release it asks the token for its compliance contract and then calls `checkIsCompliant(token, sender)` on it. If that call fails, returns something unexpected, or the token has no compliance contract, the vault treats the sender as not compliant and the claim reverts.
+
+This closes a hole: an address frozen after it gave a gift cannot use the vault to move its stock to a fresh wallet. The cost is named in the [security page](/docs/security#what-moi-does-not-defend-against): if the issuer blocks a sender after the gift is made, the claim is refused and the token refuses the refund too, until the issuer lifts the block.
+
+## Prove it
+
+Read the live vault yourself, with no key and no setup beyond Foundry's `cast`:
+
+```bash
+cast call 0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C "nextGiftId()(uint256)" --rpc-url https://bsc-dataseed.bnbchain.org
+cast call 0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C "listedTokens()(address[])" --rpc-url https://bsc-dataseed.bnbchain.org
+cast call 0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C "getGift(uint256)((address,address,address,uint64,uint8,uint256,bytes))" 1 --rpc-url https://bsc-dataseed.bnbchain.org
+```
+
+To run the whole flow against the live network, use the prove command from [Getting started](/docs/getting-started#prove-it-against-the-live-network). `npm run prove` is a dry run that signs nothing. `MOI_LIVE=1 npm run prove` buys 1 USDT of NVDAB, gifts it, claims it into a brand-new wallet through the relayer, and checks every step on chain. On mainnet, a claim through the relayer used 127,109 gas, and locking gift 1 used 348,697.

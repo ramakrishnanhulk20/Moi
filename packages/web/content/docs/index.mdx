@@ -1,0 +1,57 @@
+---
+title: Overview
+description: Moi lets you give a friend their first real stock as a link, and this page says what is live today.
+---
+
+Moi lets you give a friend their first real stock as a link. You pick a company and an amount, Moi buys the share and locks it in a vault on BNB Chain, and your friend opens the link, signs in with Google or email, and owns the share in about thirty seconds, with no seed phrase and no network fee to pay.
+
+## Where the name comes from
+
+Moi is the gift of money Tamil families give at weddings. Each guest gives, and the family writes the gift in a notebook so it can be returned one day. Moi does the same with stocks, and the notebook is BNB Chain.
+
+## Who it is for
+
+- Someone who wants to give a friend their first stock, and wants the gift to be a real share.
+- The friend who has never owned crypto. They need no wallet app and no seed phrase. They sign in with Google or email, and Moi makes a wallet for them.
+
+The shares are bStocks: tokens on BNB Smart Chain, issued by Binance's partner and backed one to one by the real security. The [FAQ](/docs/faq) says more about what a bStock is.
+
+## What is live on BNB Chain mainnet
+
+Everything below is on BNB Smart Chain mainnet, chain id 56. You can check each line yourself on BscScan.
+
+| Thing | Value |
+|---|---|
+| Vault (GiftVault) | [0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C](https://bscscan.com/address/0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C) |
+| Source code | Verified on Sourcify as an exact match on 7 October 2026 |
+| Relayer (sends claims and pays their gas) | [0x93596EBf4e4B3ACEAb8Af2B4FeA6157e3F7fb7A9](https://bscscan.com/address/0x93596EBf4e4B3ACEAb8Af2B4FeA6157e3F7fb7A9) |
+| Stocks you can give | AAPLB, NVDAB, TSLAB, MSFTB, AMZNB, GOOGLB, METAB, SPYB, QQQB |
+| Gifts made | 10 on 8 October 2026 (block 126,426,962): 2 opened, 8 waiting to be opened |
+
+To count the gifts yourself, read `nextGiftId()` on the vault and subtract one. The [contracts page](/docs/contracts) lists every function.
+
+### The live transactions
+
+These five transactions were all successful on chain when this page was written.
+
+| Step | What happened | Transaction |
+|---|---|---|
+| First purchase, 7 Oct 2026 | A real bStock bought through the Binance Trading API | [0x6a16...a9f3](https://bscscan.com/tx/0x6a1623c52a0403c6aba600d8cf35fbc77a8830f614138152066c7a7d906aa9f3) |
+| Gift 1 locked | The share goes into the vault under a one-time key | [0xc01b...c087](https://bscscan.com/tx/0xc01b783813eb3cde47888012996e09031b98cc8d49408e7521a694b218e2c087) |
+| Gift 1 claimed | Moi's relayer claims it into a brand-new wallet and pays the 127,109 gas | [0x6a13...78e8](https://bscscan.com/tx/0x6a13e2e8f14630a8a4777bf7bae7befa21154fe64ba0e64d58a7ccdca71978e8) |
+| Gift 2 wrapped | Made by the Binance Agentic Wallet, and the 5-cent gift wrap paid with b402 | [0x8ec1...38d6](https://bscscan.com/tx/0x8ec1e0666350aa500bbf2f7d36b1cd97bb8dfb2e9fd5ba328b75b899a36c38d6) |
+| Gift 2 claimed | Claimed with no gas paid by the friend | [0x660e...e28e](https://bscscan.com/tx/0x660e8ebcc983db623db05e87fa7e0c7f4583ff208f7fdb884864d86c0825e28e) |
+
+## What a judge can try in two minutes
+
+The judges section on the home page hands out one real stock gift of about one US dollar to each judge. You sign in with Google or email, type the judge code from our submission, tick the declaration that you are not a US person and not in a restricted place, and tap once. Moi sends the gift to the wallet it made for you and pays the network fee.
+
+The steps, the limits and the errors you may meet are in [Getting started](/docs/getting-started#for-a-judge).
+
+## Where to go next
+
+- [How it works](/docs/how-it-works): the life of one gift, and the Binance piece behind each step.
+- [Getting started](/docs/getting-started): the steps for a friend, a sender, a judge and a developer.
+- [The sender agent](/docs/agent): send gifts from the command line with the Binance Agentic Wallet.
+- [FAQ](/docs/faq): short answers to the questions people ask first.
+- [Contracts](/docs/contracts), [API](/docs/api) and [Security](/docs/security): the details for builders.

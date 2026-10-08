@@ -1,0 +1,104 @@
+/* The top bar, moved out of the hero's own markup with the same values */
+.site-nav {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 60px;
+  padding-inline: clamp(16px, 4vw, 56px);
+}
+
+.site-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.site-wordmark {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  transition: color 150ms;
+}
+
+.site-brand-link:hover .site-wordmark {
+  color: var(--gold);
+}
+
+.site-brand-link:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 4px;
+}
+
+.site-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.site-links {
+  display: none;
+  align-items: center;
+  gap: 28px;
+}
+
+.site-link {
+  position: relative;
+  padding-block: 6px;
+  color: var(--ink-muted);
+  font: 400 14px/1 var(--font-body);
+  transition: color 250ms ease-out;
+}
+
+.site-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 250ms ease-out;
+}
+
+.site-link:hover,
+.site-link:focus-visible {
+  color: var(--ink);
+}
+
+.site-link:hover::after,
+.site-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.site-nav-cta {
+  padding: 10px 16px;
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  color: var(--gold);
+  font: 600 14px/1 var(--font-body);
+  transition:
+    background-color 150ms,
+    color 150ms;
+}
+
+.site-nav-cta:hover {
+  background: var(--gold);
+  color: var(--bg);
+}
+
+@media (min-width: 768px) {
+  .site-nav {
+    height: 72px;
+  }
+
+  .site-links {
+    display: flex;
+  }
+}

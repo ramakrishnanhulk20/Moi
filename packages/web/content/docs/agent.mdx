@@ -1,0 +1,103 @@
+---
+title: The sender agent
+description: Send a gift from the command line with Moi's agent on the Binance Agentic Wallet.
+---
+
+The sender agent is `moi`, Moi's command line agent on the Binance Agentic Wallet. You type one command. The agent buys the stock, locks it in the vault as a gift, pays the 5-cent gift wrap with b402, and saves the gift link on your computer.
+
+The Agentic Wallet is your own wallet. You set its spending limits in the Binance app, and the agent works inside them. It drives the wallet through Binance's `baw` command line, and it starts `baw` with a list of arguments, never through a shell, so no word in a note or a server answer can become a second command. The agent builds every approval and `createGift` transaction itself. It never passes on transaction data from Moi's server.
+
+## Before you start
+
+1. Install the Binance Agentic Wallet command line:
+
+   ```bash
+   npm install -g @binance/agentic-wallet@1.10.0
+   ```
+
+2. Clone the repo and run `npm install`, as in [Getting started](/docs/getting-started#for-a-developer).
+3. Put the agent's settings in `.env` at the repo root. The agent reads only these five names from that file. It never copies them into the environment that `baw` inherits, so your other keys stay out of Binance's program.
+
+   ```bash
+   MOI_VAULT_ADDRESS=0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C
+   MOI_PAYOUT_ADDRESS=0x96E854aBDdc5C618ca843956d1303017b586aB75
+   MOI_SERVER_ORIGIN=https://your-moi-site
+   MOI_PUBLIC_ORIGIN=https://your-moi-site
+   ```
+
+   `BSC_RPC_URL` is the fifth, and it is optional. Both origins must be https, or `http://localhost` for local work, with no path. `MOI_PAYOUT_ADDRESS` is the only wallet the agent will ever pay a wrap fee to.
+4. Run `npm run moi -- signin`, and approve the pairing code in the Binance app.
+
+## What you set in the Binance app
+
+Open Binance App, Agentic Wallet, Settings. The agent only reads these settings and never changes them.
+
+| Setting | Why Moi needs it |
+|---|---|
+| Daily limit | A buy must fit in what is left of today's limit. |
+| Developer Mode | It must be on and not expired, because locking the gift is a contract call. It has its own daily limit, and what is left must cover the gift. |
+| x402 daily limit | The gift wrap is an x402 payment. At least 0.10 US dollars must be left, which is the agent's ceiling for the 5-cent fee. |
+| Token permissions | The token scope must not be Limited. Allow all tokens, or add the stock to the allowed list, or the Binance app may refuse the purchase. |
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `npm run moi -- status` | Says whether your Binance agent wallet is signed in and ready for Moi, and lists anything you still need to fix. It also turns a gift that was waiting in the Binance app into its saved link. |
+| `npm run moi -- signin` | Signs the wallet in. It prints a pairing code and a link to scan with the Binance app, then waits up to 5 minutes for you to approve. |
+| `npm run moi -- gift <TICKER> <USD>` | Buys that many dollars of the stock, locks it as a gift, wraps it and saves the link. |
+| `npm run moi -- gift <TICKER> --use-held <AMOUNT>` | Gifts stock the wallet already holds, with no purchase. |
+| `npm run moi -- wrap <GIFT_ID>` | Pays the wrap fee for a gift whose wrapping did not finish. |
+
+Both `gift` commands take the same optional flags.
+
+| Flag | What it does |
+|---|---|
+| `--note text` | A note for your friend, up to 483 bytes of text. Put it in quotes. It is sealed, so only the link opens it. |
+| `--days n` | How long the gift stays open: a whole number of days from 1 to 90. The default is 30. |
+| `--yes` | Skips the yes or no questions. Without it, the agent asks before the purchase (when it buys), before approving the vault, before locking the gift and before paying the wrap fee. |
+| `--use-held amount` | Takes the place of the dollar amount. It is a number of the stock's tokens, such as `0.0042`. Its dollar value at the RWA price must be from 0.50 to 100. |
+
+A bought gift must be from 1 to 100 US dollars. The ticker can be the short name. `NVDA` matches the symbol `NVDA` or `NVDAB`. If no listed stock matches, or more than one does, the agent stops and says so.
+
+```bash
+npm run moi -- status
+npm run moi -- gift NVDA 5 --note "Happy Diwali" --days 30
+npm run moi -- gift NVDA --use-held 0.0042 --note "Your first share"
+npm run moi -- wrap 7
+```
+
+The gift number in `wrap 7` is the number in the gift file's name, `gift-7.txt`.
+
+## What it checks before it acts
+
+- The ticker must be one of the stocks on the vault's own list, read from BNB Chain. Nothing from Moi's server can add a stock.
+- The amount, the note and the number of days must be in range.
+- The wallet must be ready. The agent reads the wallet's status, its BNB Smart Chain address, its settings and its remaining limits. It then lists in plain English everything you must change or wait for: not signed in, Developer Mode off or expired, a limit that is too low, or a token scope that is too narrow. If it cannot read a figure, that counts as a problem too.
+- The purchase comes from the Binance Agentic Wallet quote. The agent shows the quoted amount and asks you before it buys. After the swap it waits up to 3 minutes for the stock to land and counts what arrived from the wallet's balance on chain. If less than the quote less 1 percent arrives, it stops before locking anything, and the stock stays in your wallet.
+- Each approval and the `createGift` call goes through Binance's preview first. The preview's simulation must pass, and any risk Binance flags is printed before you are asked.
+- After each transaction is mined, the agent reads the chain's own copy of it. The sender, the target and the exact data must be what the agent built. A receipt alone is not trusted.
+- After `createGift`, the agent reads the gift back from the vault. It saves the link only if the stored claim key and the stock are the ones it made.
+
+## How the wrap fee is paid through b402
+
+Once the gift exists, the agent asks Moi's server to wrap it with `POST /api/wrap/{id}`. The server answers HTTP 402 and lists what it will accept. The agent does not trust that list. It requires every entry to be on BNB Smart Chain, to use the `exact` scheme, to pay the pinned payout wallet, to name one of the four accepted tokens (U, USD1, USDT or USDC), and to ask for no more than 0.10 US dollars. Moi's price is 0.05.
+
+The agent then calls `baw x402-payment preview` and `baw x402-payment sign`. It prefers U or USD1, which need no approval transaction, over USDT or USDC, which go through Permit2. It asks you before paying, signs at most one payment in a run, and sends the signed payment to the server. While Binance is still settling, the server answers 202 and the agent replays the same request for up to 3 minutes. It never signs a second payment.
+
+If the wrap does not finish, the gift still exists and its link is saved with a first line that says it is not wrapped yet. Run `npm run moi -- wrap <GIFT_ID>` later. That finishes the wrap without paying twice.
+
+## Where the link goes
+
+The agent saves the link to `gifts/gift-<id>.txt`, in the folder where you typed the command. The file is readable only by you, where your system supports that. The claim key and the link are never printed in the terminal or sent anywhere. Until the wrap finishes, the file starts with the line `# not wrapped yet`. Send your friend the link inside the file.
+
+If the Binance app holds a step for your OK, the agent stops and sends nothing more. When it is the lock that waits, the agent has already saved the claim key to `gifts/pending-<address>.txt`, so nothing is lost. Approve in the Binance app, then run `npm run moi -- status`. It finds the gift, saves its link and tells you to run `wrap`. When it is the vault approval that waits, no gift was made yet and the stock stays in your wallet. You can gift it later with `--use-held`.
+
+## Gift 2: the live run
+
+Gift 2 on BNB Chain mainnet was made this way. The Binance Agentic Wallet gifted 0.004220084869347249 NVDAB that it already held, using `--use-held`, so nothing was bought. The 5-cent gift wrap was paid with a real b402 payment, and the gift was then claimed with no gas paid by the friend.
+
+| Step | Transaction |
+|---|---|
+| Wrap payment settled through b402 | [0x8ec1...38d6](https://bscscan.com/tx/0x8ec1e0666350aa500bbf2f7d36b1cd97bb8dfb2e9fd5ba328b75b899a36c38d6) |
+| Claim sent by Moi's relayer | [0x660e...e28e](https://bscscan.com/tx/0x660e8ebcc983db623db05e87fa7e0c7f4583ff208f7fdb884864d86c0825e28e) |

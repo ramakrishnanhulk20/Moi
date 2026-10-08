@@ -1,0 +1,64 @@
+---
+title: FAQ
+description: Short answers to the questions people ask first about Moi gifts.
+---
+
+## Receiving a gift
+
+### Do I need a crypto wallet to receive a gift?
+
+No. You open the link and sign in with Google or email, and Moi makes a wallet for you on BNB Chain. There is no seed phrase to keep and no fee to pay. You can export the wallet's key later if you want to use it somewhere else.
+
+### Who pays the network fee?
+
+The friend pays nothing. Moi's relayer wallet sends the claim and pays its gas, which was 127,109 gas for each of the two live claims. The sender pays the network fee for their own transactions, plus the 5-cent gift wrap.
+
+### What if my friend never opens it?
+
+The gift stays locked in the vault until it expires. The sender picks the time: 7, 30 or 90 days on the website, or any whole number of days from 1 to 90 in the agent. The default is 30 days. After the expiry anyone can call `refund`, and the stock goes back to the sender.
+
+### What happens if I lose the link?
+
+Moi cannot send it again, because the key in the link never reaches Moi's servers. If you are the friend, ask the sender to send the whole link again. If the sender has lost it too, nobody can open the gift, and the sender can take it back with `refund` once it expires.
+
+### Why can't US persons receive gifts?
+
+The issuer of the stock tokens does not allow them to be offered or made available in the United States, or to US persons. Moi therefore refuses quotes and claims that come from the United States and its territories, Canada, the Netherlands, the United Kingdom, Japan, Iran, Cuba, North Korea, and the Crimea, Sevastopol, Donetsk and Luhansk regions of Ukraine. That list joins the issuer's terms with Binance's list of prohibited regions for its Web3 API. The claim page also asks the friend to declare that they are not a US person and not in a restricted place, and Moi does no ID check, so it cannot see a VPN or a false declaration.
+
+## Sending a gift
+
+### Which stocks can I give?
+
+Nine, read live from the vault: Apple (AAPLB), NVIDIA (NVDAB), Tesla (TSLAB), Microsoft (MSFTB), Amazon (AMZNB), Alphabet (GOOGLB), Meta (METAB), SPY (SPYB) and Invesqo QQQ (QQQB). The [contracts page](/docs/contracts#the-stocks-you-can-give) has the token addresses. Moi's server and pages read the list from the vault, so the list on chain is the one that counts.
+
+### How big can a gift be?
+
+From 1 to 100 US dollars. The note can be up to 483 bytes of text, and the gift stays open for 7, 30 or 90 days on the website, or 1 to 90 days in the agent.
+
+### What is the 5-cent gift wrap?
+
+It is a fee of 0.05 US dollars, paid with Binance's b402 payment service when the gift is made. The fee is paid in U, USD1, USDT or USDC to Moi's payout wallet. Moi's relayer delivers only wrapped gifts, so a gift cannot be opened until its wrap has settled. The judge gifts, which Moi makes from its own wallet, are the one exception.
+
+### Is my note private?
+
+Yes. The note is encrypted in the sender's browser with a key made from the link's key, and only the encrypted text goes on the chain. Only someone who holds the whole link can read it.
+
+## Safety and rules
+
+### Can Moi take or move my gift?
+
+No. Only the link's key can release a gift, and only to the wallet it signed for. The owner can pause claims, edit the token list and set the relayer, but none of that moves a gift, the contract cannot be upgraded, and refunds work even while it is paused. The one thing Moi cannot override is the stock's issuer, which can pause a token or block an address.
+
+### Is this investment advice?
+
+No. Moi is a way to give a stock as a gift, and it makes no recommendation about what to buy. Prices move, and a gift can be worth less than it cost.
+
+## The stock
+
+### What is a bStock?
+
+A bStock is a token on BNB Smart Chain, issued by Binance's partner and backed one to one by the real security. When the company pays a dividend, the token records it by raising an on-chain multiplier called `uiMultiplier()`. One token can therefore stand for slightly more than one share. NVDAB's multiplier read about 1.0008 on 8 October 2026.
+
+### What if the stock market is closed?
+
+Moi shows each stock's market status, read from Binance RWA Data. A claim and a refund never trade, and the vault reads no prices, so a closed market cannot stop a friend from opening a gift or a sender from taking one back. A purchase must pass Moi's price check, and a quote more than 2 percent above the reference price is refused, not repaired. Today RWA Data gives no market status for AAPLB and AMZNB, so those two show as unknown.

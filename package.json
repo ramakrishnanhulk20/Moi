@@ -5,6 +5,9 @@
   "workspaces": [
     "packages/*"
   ],
+  "overrides": {
+    "ws": "8.22.0"
+  },
   "scripts": {
     "test": "npm test --workspaces --if-present",
     "slice": "npm run slice --workspace=@moi/core",

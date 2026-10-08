@@ -1,0 +1,1001 @@
+/* Pieces the four landing sections share */
+.sec-label {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 12px/1.4 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.skeleton-line {
+  display: block;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--line) 0%, rgba(246, 239, 230, 0.24) 50%, var(--line) 100%);
+  background-size: 200% 100%;
+  animation: sections-shimmer 1.4s linear infinite;
+}
+
+@keyframes sections-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* A gold or grey link whose underline draws from the left on hover */
+.proof {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 12px/1.6 var(--font-mono);
+}
+
+.proof-link,
+.gold-link,
+.draw-link {
+  position: relative;
+}
+
+.proof-link,
+.gold-link {
+  color: var(--gold);
+}
+
+.proof-link::after,
+.gold-link::after,
+.draw-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 250ms ease-out;
+}
+
+.proof-link:hover::after,
+.proof-link:focus-visible::after,
+.gold-link:hover::after,
+.gold-link:focus-visible::after,
+.draw-link:hover::after,
+.draw-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.draw-link {
+  transition: color 250ms ease-out;
+}
+
+.draw-link:hover,
+.draw-link:focus-visible {
+  color: var(--ink);
+}
+
+/* How it works */
+.how {
+  position: relative;
+  background: var(--bg);
+}
+
+.how-header,
+.how-pin {
+  position: relative;
+  overflow: clip;
+  isolation: isolate;
+}
+
+.how-header {
+  padding: 72px clamp(16px, 4vw, 56px) 32px;
+}
+
+.how-title {
+  margin: 16px 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 6vw, 5.5rem);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+
+.how-title-italic {
+  color: var(--gold);
+  font-style: italic;
+}
+
+.how-pin {
+  padding: 0 clamp(16px, 4vw, 56px) 72px;
+}
+
+.how-strip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.how-frame {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  padding: 24px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* The sprocket holes of the film: rounded 10 by 14 slots, 18px apart, 12px in from the top and bottom edge */
+.how-frame::before,
+.how-frame::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14'%3E%3Crect width='10' height='14' rx='2' fill='%23f6efe6' fill-opacity='0.08'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-position: center top;
+  pointer-events: none;
+}
+
+.how-frame::before {
+  top: 12px;
+}
+
+.how-frame::after {
+  bottom: 12px;
+}
+
+.how-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The top margin keeps the big digits clear of the sprocket holes when the frame padding is only 24px. */
+.how-number {
+  margin: 14px 0 0;
+  color: transparent;
+  font-family: var(--font-display);
+  font-size: 96px;
+  font-weight: 900;
+  line-height: 0.8;
+  -webkit-text-stroke: 1.5px var(--gold);
+}
+
+.how-label {
+  margin-top: 24px;
+}
+
+.how-heading {
+  margin: 12px 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.05;
+}
+
+.how-body {
+  max-width: 34ch;
+  margin: 16px 0 0;
+  color: var(--ink-muted);
+  font: 400 18px/1.55 var(--font-body);
+}
+
+.how-text .proof {
+  margin-top: auto;
+  padding-top: 24px;
+}
+
+.how-art {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding-bottom: 14px;
+}
+
+/* Scene one: three stock chips and the dollar-to-shares sum */
+.how-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 308px;
+}
+
+.how-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(280px, calc(100% - 28px));
+  height: 64px;
+  padding-inline: 20px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.how-chip:nth-child(2) {
+  margin-left: 14px;
+}
+
+.how-chip:nth-child(3) {
+  margin-left: 28px;
+}
+
+.how-chip[data-top="true"] {
+  position: relative;
+  z-index: 1;
+  border-color: var(--gold);
+}
+
+.how-chip-name {
+  color: var(--ink);
+  font: 600 16px/1 var(--font-body);
+}
+
+.how-chip-price {
+  color: var(--ink-muted);
+  font: 400 14px/1 var(--font-mono);
+}
+
+.how-chip-skeleton {
+  width: 72px;
+  height: 10px;
+}
+
+.how-math {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 32px;
+  color: var(--ink);
+  font-family: var(--font-display);
+  /* 40px on desktop. On a phone the sum has to fit inside the frame, so it shrinks with the screen. */
+  font-size: clamp(28px, 9vw, 40px);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.how-math-note {
+  margin: 32px 0 0;
+  color: var(--ink-muted);
+  font: 400 16px/1.5 var(--font-body);
+}
+
+.how-arrow {
+  flex: none;
+  width: 48px;
+  height: auto;
+  overflow: visible;
+}
+
+.how-arrow path {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 0;
+}
+
+.how-math-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.how-math-skeleton {
+  width: 110px;
+  height: 36px;
+}
+
+.how-math-caption {
+  color: var(--ink-muted);
+  font: 400 16px/1.2 var(--font-body);
+}
+
+/* Scene two: the closed envelope, with the seal stamped on when the scene plays */
+@property --seal-scale {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+.how-envelope {
+  width: 280px;
+  max-width: 100%;
+}
+
+.how-envelope svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* The seal is the circles and the V that sit directly under the svg. The V carries its own placement
+   in a transform attribute, so the stamp uses the separate translate and scale properties: together
+   they scale around the seal's centre, (180, 120) in the drawing, and leave that placement alone. */
+.how-envelope svg > circle,
+.how-envelope svg > path {
+  translate: calc((1 - var(--seal-scale)) * 180px) calc((1 - var(--seal-scale)) * 120px);
+  scale: var(--seal-scale);
+}
+
+.how-frame[data-armed="true"] .how-envelope svg > circle,
+.how-frame[data-armed="true"] .how-envelope svg > path {
+  --seal-scale: 1.4;
+  opacity: 0;
+}
+
+.how-frame[data-armed="true"][data-played="true"] .how-envelope svg > circle,
+.how-frame[data-armed="true"][data-played="true"] .how-envelope svg > path {
+  --seal-scale: 1;
+  opacity: 1;
+  transition:
+    --seal-scale 500ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.how-caption {
+  margin: 20px 0 0;
+  color: var(--ink-muted);
+  font: 400 12px/1.4 var(--font-mono);
+}
+
+/* Scene one's arrow draws from the left when the scene plays */
+.how-frame[data-armed="true"] .how-arrow path {
+  stroke-dashoffset: 1;
+}
+
+.how-frame[data-armed="true"][data-played="true"] .how-arrow path {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 700ms ease-out;
+}
+
+/* Scene three: a phone that shows the invitation, then the certificate */
+.how-phone {
+  --phone-w: 220px;
+  --phone-h: 440px;
+  position: relative;
+  box-sizing: border-box;
+  width: var(--phone-w);
+  height: var(--phone-h);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 36px;
+}
+
+.how-screen {
+  position: absolute;
+  inset: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+}
+
+.how-screen-gift {
+  opacity: 0;
+}
+
+.how-screen-cert {
+  --p: 1;
+  --m: 2.4;
+  opacity: 1;
+}
+
+.how-screen-label {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 11px/1.4 var(--font-mono);
+}
+
+.how-screen-title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.how-screen-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 44px;
+  margin-top: 8px;
+  background: var(--ink);
+  border-radius: 8px;
+  color: var(--bg);
+  font: 600 15px/1 var(--font-body);
+}
+
+.how-frame[data-armed="true"] .how-screen-gift {
+  opacity: 1;
+}
+
+.how-frame[data-armed="true"] .how-screen-cert {
+  opacity: 0;
+}
+
+.how-frame[data-armed="true"][data-played="true"] .how-screen {
+  transition: opacity 600ms ease-in-out;
+}
+
+.how-frame[data-armed="true"][data-played="true"] .how-screen-gift {
+  opacity: 0;
+}
+
+.how-frame[data-armed="true"][data-played="true"] .how-screen-cert {
+  opacity: 1;
+}
+
+@media (min-width: 1024px) {
+  .how-header {
+    padding-block: 120px 56px;
+  }
+
+  .how-frame {
+    grid-template-columns: 46% 54%;
+    gap: 0;
+    padding: 56px;
+  }
+
+  .how-number {
+    margin-top: 0;
+    font-size: 160px;
+  }
+
+  .how-art {
+    padding-bottom: 0;
+  }
+
+  .how-heading {
+    font-size: 44px;
+  }
+
+  .how-envelope {
+    width: 420px;
+  }
+
+  .how-arrow {
+    width: 64px;
+  }
+
+  .how-math {
+    gap: 16px;
+    font-size: 40px;
+  }
+
+  .how-phone {
+    --phone-w: 260px;
+    --phone-h: 520px;
+  }
+}
+
+/* Desktop with motion: the film strip, pinned while it slides sideways */
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+  .how-pin {
+    display: flex;
+    align-items: center;
+    height: 100vh;
+    padding: 0;
+  }
+
+  .how-strip {
+    flex: none;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 4vw;
+    width: max-content;
+    margin-left: clamp(16px, 4vw, 56px);
+    will-change: transform;
+  }
+
+  /* Never shorter than 72vh, but it grows if the text needs more room on a short screen. */
+  .how-frame {
+    flex: none;
+    width: 78vw;
+    min-height: 72vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line {
+    animation: none;
+  }
+
+  .proof-link::after,
+  .gold-link::after,
+  .draw-link::after,
+  .draw-link {
+    transition: none;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Live numbers */
+.live {
+  position: relative;
+  overflow: clip;
+  isolation: isolate;
+  padding-block: 72px;
+  background: var(--bg);
+}
+
+.live-rule {
+  position: absolute;
+  top: 0;
+  left: clamp(16px, 4vw, 56px);
+  right: clamp(16px, 4vw, 56px);
+  height: 1px;
+  background: var(--gold);
+}
+
+.live-inner {
+  padding-inline: clamp(16px, 4vw, 56px);
+}
+
+.live-body {
+  display: flex;
+  flex-direction: column;
+  gap: 56px;
+  margin-top: 32px;
+}
+
+.live-row {
+  --figure-size: clamp(80px, 12vw, 200px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 40px;
+  min-width: 0;
+}
+
+.live-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* The latest gifts list: one 44px row per gift, a state chip on the right */
+.latest {
+  min-width: 0;
+}
+
+.latest-list {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.latest-row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 44px;
+  border-bottom: 1px solid var(--line);
+}
+
+.latest-id {
+  flex: none;
+  width: 48px;
+  color: var(--ink-muted);
+  font: 400 13px/1 var(--font-mono);
+}
+
+.latest-symbol {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font: 500 15px/1.2 var(--font-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latest-chip {
+  flex: none;
+  margin-left: auto;
+  padding: 3px 8px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font: 400 11px/1.4 var(--font-mono);
+  letter-spacing: 0.14em;
+}
+
+.latest-chip-waiting {
+  color: var(--pending);
+}
+
+.latest-chip-opened {
+  color: var(--ok);
+}
+
+.latest-chip-taken-back {
+  color: var(--ink-muted);
+}
+
+.latest-skeleton {
+  width: 100%;
+  height: 16px;
+}
+
+/* Each row fades and rises in, 60ms after the one above, once the band is 40 percent on screen. */
+.latest[data-motion="on"] .latest-row-live {
+  opacity: 0;
+}
+
+.latest[data-motion="on"][data-play="true"] .latest-row-live {
+  animation: latest-rise 300ms ease-out forwards;
+  animation-delay: calc(var(--i) * 60ms);
+}
+
+@keyframes latest-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .latest[data-motion="on"] .latest-row-live,
+  .latest[data-motion="on"][data-play="true"] .latest-row-live {
+    opacity: 1;
+    animation: none;
+  }
+}
+
+.live-figure {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--figure-size);
+  font-weight: 900;
+  line-height: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-skeleton {
+  width: calc(var(--figure-size) * 1.6);
+  height: calc(var(--figure-size) * 0.9);
+}
+
+.live-caption {
+  margin: 0;
+}
+
+.live-failed-text {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 16px/1.5 var(--font-body);
+}
+
+.live-retry {
+  margin-top: 12px;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: 600 16px/1.5 var(--font-body);
+}
+
+.live-source {
+  margin: 48px 0 0;
+  color: var(--ink-muted);
+  font: 400 12px/1.6 var(--font-mono);
+}
+
+@media (min-width: 1024px) {
+  .live {
+    padding-top: 120px;
+    padding-bottom: 96px;
+  }
+
+  .live-body {
+    display: grid;
+    grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
+    column-gap: 4vw;
+    align-items: start;
+  }
+
+  .live-row {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 6vw;
+  }
+}
+
+/* The agent */
+.agent {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 48px;
+  align-items: center;
+  overflow: clip;
+  isolation: isolate;
+  padding: 72px clamp(16px, 4vw, 56px);
+  background: var(--bg);
+}
+
+.agent-text {
+  min-width: 0;
+}
+
+.agent-title {
+  margin: 16px 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 5vw, 4.5rem);
+  font-weight: 900;
+  line-height: 0.95;
+}
+
+.agent-body {
+  max-width: 40ch;
+  margin: 24px 0 0;
+  color: var(--ink-muted);
+  font: 400 18px/1.55 var(--font-body);
+}
+
+.agent-proofs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 32px;
+}
+
+.agent-stage {
+  min-width: 0;
+}
+
+.agent-recorded {
+  margin: 0 0 10px;
+  color: var(--ink-muted);
+  font: 400 11px/1.4 var(--font-mono);
+}
+
+.agent-terminal {
+  overflow: hidden;
+  background: #0a0607;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.agent-titlebar {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding-inline: 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-muted);
+  font: 400 12px/1 var(--font-mono);
+}
+
+.agent-screen {
+  padding: 20px;
+  font-variant-ligatures: none;
+  color: var(--ink);
+  font: 400 13px/1.7 var(--font-mono);
+}
+
+.agent-line {
+  min-height: 1.7em;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.agent-prompt {
+  color: var(--gold);
+}
+
+.agent-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: var(--gold);
+  vertical-align: text-bottom;
+}
+
+/* The finished picture has the cursor waiting on a fresh line, not blinking. While the command types, it sits after the typed text. */
+.agent-cursor-inline {
+  display: none;
+}
+
+.agent-terminal[data-phase="armed"] .agent-cursor-inline,
+.agent-terminal[data-phase="typing"] .agent-cursor-inline {
+  display: inline-block;
+  animation: agent-blink 1s steps(1) infinite;
+}
+
+.agent-terminal[data-phase="armed"] .agent-line-end,
+.agent-terminal[data-phase="typing"] .agent-line-end,
+.agent-terminal[data-phase="output"] .agent-line-end {
+  visibility: hidden;
+}
+
+.agent-terminal[data-phase="done"] .agent-line-end .agent-cursor {
+  animation: agent-blink 1s steps(1) infinite;
+}
+
+.agent-terminal[data-phase] .agent-line-output {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.agent-terminal[data-phase] .agent-line-output[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out;
+}
+
+@keyframes agent-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (min-width: 1024px) {
+  .agent {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
+    column-gap: 5vw;
+    padding-block: 72px 140px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-cursor {
+    animation: none;
+  }
+}
+
+/* The credits */
+.credits {
+  position: relative;
+  min-height: 100vh;
+  overflow: clip;
+  isolation: isolate;
+  padding: 160px 16px 96px;
+  background: var(--bg);
+}
+
+.credits-column {
+  max-width: 640px;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.credits-mark {
+  display: flex;
+  justify-content: center;
+}
+
+.credits-moi {
+  margin: 16px 0 0;
+  padding-left: 0.3em;
+  color: var(--gold);
+  font-family: var(--font-display);
+  font-size: clamp(4rem, 12vw, 9rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.3em;
+}
+
+.credits-tagline {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-size: 24px;
+  font-style: italic;
+  line-height: 1.3;
+}
+
+.credits-meaning {
+  margin: 12px 0 0;
+  color: var(--ink-muted);
+  font: 400 15px/1.5 var(--font-body);
+}
+
+.credits-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 56px 0 0;
+}
+
+.credits-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 4px;
+  margin: 0;
+}
+
+.credits-role {
+  color: var(--ink-muted);
+  font: 400 12px/1.4 var(--font-mono);
+  letter-spacing: 0.18em;
+}
+
+.credits-name {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.credits-rule {
+  width: 120px;
+  height: 1px;
+  margin: 64px auto 0;
+  background: var(--gold);
+}
+
+.credits-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 28px;
+  margin-top: 28px;
+  color: var(--ink-muted);
+  font: 400 15px/1.4 var(--font-body);
+}
+
+.credits-fine {
+  max-width: 60ch;
+  margin: 48px auto 0;
+  color: var(--ink-muted);
+  font: 400 13px/1.55 var(--font-body);
+}
+
+@media (min-width: 768px) {
+  .credits-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 32px;
+    align-items: baseline;
+  }
+
+  .credits-role {
+    text-align: right;
+  }
+
+  .credits-name {
+    text-align: left;
+  }
+}

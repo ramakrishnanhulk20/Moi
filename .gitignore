@@ -6,6 +6,7 @@ STATE.md
 DECISIONS.md
 AGENT-RETROS.md
 SPEC.md
+SUBMISSION-DRAFTS.md
 DX-LOG.md
 docs/RD-BRIEF.md
 docs/AUDIT-PACKET.md
@@ -26,3 +27,13 @@ bscscan-verify/
 # gift link files hold live claim keys
 gifts/
 **/gifts/
+
+# private evidence for the DX report Ram writes himself
+dx/
+
+# private research briefs
+docs/RD-PRIVY.md
+.next-*/
+
+# Fumadocs generated content index
+.source/

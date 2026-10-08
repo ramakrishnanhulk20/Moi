@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createMDX } from "fumadocs-mdx/next";
 import type { NextConfig } from "next";
 
 // Local runs share the one repo-root .env with core and the agent. Vercel has no such file and sets
@@ -38,6 +39,17 @@ const nextConfig: NextConfig = {
       // copies that file, keys included, into the build output as an asset.
       { include: CORE_SRC, parser: { url: false } },
     );
+    // Privy imports Solana packages that are not installed, because Moi has no Solana wallets. Next
+    // 16 builds the client externals as an array, which makes the fix in Privy's own guide do
+    // nothing, so each package is pointed at an empty module instead.
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@solana/kit": false,
+      "@solana-program/system": false,
+      "@solana-program/token": false,
+      "@solana-program/memo": false,
+      "@farcaster/mini-app-solana": false,
+    };
     return config;
   },
   // C13: no redirects are configured anywhere, so nothing under /g/ can send the claim tab to
@@ -58,4 +70,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Reads source.config.ts and turns content/docs into the pages of the /docs route. Every setting above is kept.
+const withMDX = createMDX();
+
+export default withMDX(nextConfig);

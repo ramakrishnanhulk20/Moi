@@ -1,0 +1,394 @@
+/* The page */
+.home {
+  background: var(--bg);
+}
+
+.home :focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* The hero: one section, pinned while --p runs from 0 to 1 */
+.hero {
+  --p: 0;
+  --rest-x: 0.74;
+  --rest-y: 0.5;
+  --final-x: 0.74;
+  --final-y: 0.6;
+  --final-w: 0.43;
+  --cx: 74%;
+  --cy: 60%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  padding-bottom: 44px;
+  overflow: clip;
+  isolation: isolate;
+  background-color: var(--bg);
+}
+
+/* Copy */
+.hero-content {
+  position: relative;
+  z-index: 2;
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 20px clamp(16px, 4vw, 56px) 28px;
+  pointer-events: none;
+}
+
+.hero-content a {
+  pointer-events: auto;
+}
+
+.hero-meta {
+  margin: 0 0 clamp(16px, 2.4vw, 28px);
+  color: var(--ink-muted);
+  font: 400 12px/1.7 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.hero-meta-part {
+  white-space: nowrap;
+}
+
+.hero-meta-gap {
+  white-space: pre-wrap;
+}
+
+.hero-title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(3.4rem, 10.5vw, 10rem);
+  font-weight: 900;
+  line-height: 0.92;
+  letter-spacing: -0.035em;
+}
+
+.hero-title-line {
+  display: block;
+}
+
+.hero-word {
+  display: inline-block;
+}
+
+.hero-word-italic {
+  color: var(--gold);
+  font-style: italic;
+}
+
+.hero-sub {
+  max-width: 36ch;
+  margin: clamp(18px, 2.4vw, 28px) 0 0;
+  color: var(--ink);
+  font: 400 17px/1.5 var(--font-body);
+}
+
+.hero-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: clamp(22px, 3vw, 36px);
+}
+
+.hero-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  line-height: 1.2;
+  text-align: center;
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    transform 150ms;
+}
+
+.hero-btn-primary {
+  padding: 16px 24px;
+  background: var(--gold);
+  color: var(--bg);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.hero-btn-primary:hover {
+  background: var(--gold-deep);
+  transform: translateY(-1px);
+}
+
+.hero-btn-secondary {
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.hero-btn-secondary:hover {
+  border-color: var(--ink);
+}
+
+/* Live ticker */
+.hero-ticker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  border-top: 1px solid var(--line);
+  overflow: hidden;
+  color: var(--ink-muted);
+  font: 400 13px/1 var(--font-mono);
+}
+
+.hero-ticker-track {
+  display: flex;
+  width: max-content;
+  animation: hero-ticker-slide 40s linear infinite;
+}
+
+.hero-ticker:hover .hero-ticker-track {
+  animation-play-state: paused;
+}
+
+.hero-ticker-item {
+  display: inline-flex;
+  align-items: center;
+  white-space: pre;
+}
+
+.hero-ticker-dot {
+  padding-inline: 20px;
+  color: var(--gold);
+}
+
+.hero-ticker-skeletons {
+  display: flex;
+  gap: 28px;
+  padding-inline: clamp(16px, 4vw, 56px);
+}
+
+.skeleton-bar {
+  display: block;
+  width: 120px;
+  height: 10px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--line) 0%, rgba(246, 239, 230, 0.24) 50%, var(--line) 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s linear infinite;
+}
+
+@keyframes hero-ticker-slide {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* Film grain */
+.hero-grain {
+  position: absolute;
+  inset: -8px;
+  z-index: 5;
+  background-size: 240px 240px;
+  mix-blend-mode: overlay;
+  opacity: 0.06;
+  pointer-events: none;
+  animation: hero-grain-jitter 0.5s steps(2) infinite;
+}
+
+@keyframes hero-grain-jitter {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-2px, 1px);
+  }
+  100% {
+    transform: translate(1px, -2px);
+  }
+}
+
+/* The stage: lights, canvas, and the drawing shown before the canvas is ready */
+.hero-stage {
+  position: absolute;
+  inset: 0 0 44px;
+  z-index: 1;
+  container-type: size;
+}
+
+.hero-light {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The stage light gives way to the poster spotlight between p 0.55 and 0.85, with no script involved. */
+.hero-light-a {
+  background-image:
+    radial-gradient(60% 60% at 70% 40%, rgba(242, 177, 61, 0.16), transparent 70%),
+    radial-gradient(40% 40% at 20% 80%, color-mix(in srgb, var(--maroon) 50%, transparent), transparent 70%);
+  opacity: calc(1 - clamp(0, (var(--p) - 0.55) / 0.3, 1));
+}
+
+.hero-light-b {
+  background-image:
+    radial-gradient(45% 55% at var(--cx) var(--cy), rgba(242, 177, 61, 0.2), transparent 70%),
+    radial-gradient(120% 120% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.65));
+  opacity: clamp(0, (var(--p) - 0.55) / 0.3, 1);
+}
+
+.hero-stage-canvas,
+.hero-fallback {
+  position: absolute;
+  inset: 0;
+}
+
+.hero-card-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.hero-fallback {
+  pointer-events: none;
+  transition: opacity 400ms ease;
+}
+
+.hero-fallback[data-gone="true"] {
+  opacity: 0;
+}
+
+/* 2.4 world units of envelope is 63.4% of the stage height at the camera distance, so the drawing matches the canvas. */
+.hero-fallback .envelope-fallback {
+  position: absolute;
+  left: calc(var(--rest-x) * 100%);
+  top: calc(var(--rest-y) * 100%);
+  width: 63.4cqh;
+  height: auto;
+  overflow: visible;
+  transform: translate(-50%, -50%) perspective(900px) rotateX(-6.9deg) rotateY(-18.3deg);
+}
+
+/* Reduced motion: the finished picture, standing still. The numbers are the same custom properties the scene reads. */
+.hero-static-envelope {
+  position: absolute;
+  left: calc(var(--rest-x) * 100%);
+  top: calc(var(--rest-y) * 100% + 13.2cqh);
+  width: 63.4cqh;
+  transform: translate(-50%, -50%);
+  opacity: 0.35;
+}
+
+.hero-static-envelope .envelope-fallback {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.hero-static-cert {
+  position: absolute;
+  left: calc(var(--final-x) * 100%);
+  top: calc(var(--final-y) * 100%);
+  width: min(calc(var(--final-w) * 100vw), calc(1.55 * 0.62 * 100vh));
+  transform: translate(-50%, -50%) perspective(1400px) rotateY(-13.75deg) rotateZ(-5.73deg);
+}
+
+/* Tablet and phone: the stage is a box below the copy, and the envelope sits low enough for the certificate to rise clear of the top */
+@media (max-width: 1023px) {
+  .hero {
+    --rest-x: 0.5;
+    --rest-y: 0.62;
+    --final-x: 0.5;
+    --final-y: 0.5;
+    --final-w: 0.8;
+  }
+
+  .hero-stage {
+    position: relative;
+    inset: auto;
+    height: 520px;
+  }
+
+  .hero-light {
+    inset: -40svh -30vw;
+  }
+
+  .hero-static-cert {
+    width: calc(var(--final-w) * 100%);
+    transform: translate(-50%, -50%) rotate(-4deg);
+  }
+}
+
+/* Phone */
+@media (max-width: 767px) {
+  .hero {
+    --final-w: 0.92;
+  }
+
+  .hero-stage {
+    height: 440px;
+  }
+}
+
+/* Tablet and up */
+@media (min-width: 768px) {
+  .hero-sub {
+    font-size: 19px;
+  }
+
+  .hero-actions {
+    flex-direction: row;
+    gap: 12px;
+  }
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+  .hero-title-line {
+    white-space: nowrap;
+  }
+
+  .hero-inner {
+    width: 55%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero {
+    --p: 1;
+  }
+
+  .hero-ticker-track,
+  .hero-grain,
+  .skeleton-bar {
+    animation: none;
+  }
+
+  .hero-fallback {
+    transition: none;
+  }
+}

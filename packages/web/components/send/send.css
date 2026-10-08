@@ -1,0 +1,886 @@
+/* The page frame: the same stage light and film grain as the claim page */
+.send-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  overflow: clip;
+  isolation: isolate;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(55% 45% at 72% 22%, rgba(242, 177, 61, 0.14), transparent 70%),
+    radial-gradient(40% 40% at 15% 85%, color-mix(in srgb, var(--maroon) 50%, transparent), transparent 70%);
+}
+
+.send-page :focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.send-page .hero-grain {
+  position: absolute;
+  inset: -8px;
+  z-index: 5;
+  background-size: 240px 240px;
+  mix-blend-mode: overlay;
+  opacity: 0.06;
+  pointer-events: none;
+  animation: send-grain-jitter 0.5s steps(2) infinite;
+}
+
+@keyframes send-grain-jitter {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-2px, 1px);
+  }
+  100% {
+    transform: translate(1px, -2px);
+  }
+}
+
+.send-main {
+  position: relative;
+  z-index: 2;
+  flex: 1 0 auto;
+  width: 100%;
+  padding: 24px clamp(16px, 4vw, 56px) 96px;
+}
+
+/* Header */
+.send-head {
+  margin-bottom: 32px;
+}
+
+.send-label {
+  margin: 0 0 16px;
+  color: var(--ink-muted);
+  font: 400 12px/1.7 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.send-label-small {
+  margin-bottom: 12px;
+  font-size: 11px;
+}
+
+.send-title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+}
+
+.send-title-italic {
+  color: var(--gold);
+  font-style: italic;
+}
+
+/* Columns: on a phone the preview comes first, then the form; on a desktop the form is on the left and the panel sticks on the right */
+.send-cols {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.send-side {
+  order: -1;
+  min-width: 0;
+}
+
+.send-form-col {
+  min-width: 0;
+}
+
+@media (max-width: 1023px) {
+  .send-page:not([data-run="form"]) .send-form {
+    display: none;
+  }
+
+  .send-side[data-mode="form"] .send-cert {
+    width: 72%;
+    margin-inline: auto;
+  }
+}
+
+@media (min-width: 1024px) {
+  .send-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 52fr) minmax(0, 48fr);
+    gap: clamp(32px, 5vw, 80px);
+    align-items: start;
+  }
+
+  .send-side {
+    order: 0;
+    position: sticky;
+    top: 96px;
+  }
+}
+
+/* Text links and text buttons: gold, with an underline that draws from the left on hover */
+.send-link {
+  position: relative;
+  display: inline-block;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--gold);
+  font: 600 15px/1.4 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.send-link-small {
+  font-size: 14px;
+}
+
+.send-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 250ms ease-out;
+}
+
+.send-link:hover::after {
+  transform: scaleX(1);
+}
+
+/* Buttons */
+.send-primary,
+.send-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  border-radius: 8px;
+  font: 600 16px/1.2 var(--font-body);
+  text-align: center;
+  cursor: pointer;
+}
+
+.send-primary-tall {
+  min-height: 52px;
+}
+
+.send-primary {
+  border: 0;
+  background: var(--gold);
+  color: var(--bg);
+  transition: background-color 150ms;
+}
+
+.send-primary:not(:disabled):hover {
+  background: var(--gold-deep);
+}
+
+.send-primary:disabled,
+.send-secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.send-secondary {
+  border: 1px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
+  transition:
+    background-color 150ms,
+    color 150ms;
+}
+
+.send-secondary:not(:disabled):hover {
+  background: var(--gold);
+  color: var(--bg);
+}
+
+.send-secondary-inline {
+  width: auto;
+  margin-top: 16px;
+  padding: 12px 20px;
+}
+
+/* Small text */
+.send-hint,
+.send-pending-text,
+.send-warning {
+  margin: 12px 0 0;
+  font: 400 14px/1.5 var(--font-body);
+}
+
+.send-hint,
+.send-warning {
+  color: var(--ink-muted);
+}
+
+.send-pending-text {
+  color: var(--pending);
+}
+
+.send-warning {
+  margin-top: 16px;
+}
+
+/* Connect row */
+.send-connect {
+  margin-bottom: 28px;
+}
+
+.send-wallet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin: 0;
+  color: var(--ink);
+  font: 400 13px/1.7 var(--font-mono);
+}
+
+.send-wallet-dot {
+  color: var(--ink-muted);
+  white-space: pre;
+}
+
+.send-wallet-out {
+  margin-left: 16px;
+}
+
+/* The form */
+.send-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.send-fields:disabled {
+  opacity: 0.5;
+}
+
+.send-soft {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+}
+
+.send-note-text {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 14px/1.5 var(--font-body);
+}
+
+/* Stock tiles */
+.send-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.send-tile {
+  position: relative;
+  container-type: inline-size;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 72px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms;
+}
+
+.send-tile:not(:disabled):hover {
+  border-color: var(--ink-muted);
+}
+
+.send-tile[data-selected="true"],
+.send-tile[data-selected="true"]:hover {
+  border-color: var(--gold);
+}
+
+.send-tile:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.send-tile-skeleton {
+  display: block;
+  background-image: linear-gradient(90deg, var(--bg-raised) 0%, rgba(246, 239, 230, 0.1) 50%, var(--bg-raised) 100%);
+  background-size: 200% 100%;
+  animation: send-shimmer 1.4s linear infinite;
+  cursor: default;
+}
+
+@keyframes send-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.send-logo {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--line);
+}
+
+.send-logo-blank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-muted);
+  font: 600 12px/1 var(--font-mono);
+}
+
+.send-tile-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.send-tile-name {
+  overflow: hidden;
+  font: 600 15px/1.2 var(--font-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.send-tile-symbol {
+  color: var(--ink-muted);
+  font: 400 12px/1.2 var(--font-mono);
+}
+
+.send-tile-opens {
+  color: var(--ink-muted);
+  font: 400 11px/1.2 var(--font-mono);
+  white-space: nowrap;
+}
+
+.send-tile-price {
+  flex: none;
+  font: 400 14px/1 var(--font-mono);
+}
+
+.send-tile-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: var(--gold);
+}
+
+/* A narrow tile puts the price on the symbol's line, so the name keeps the room it needs */
+@container (max-width: 210px) {
+  .send-tile-price {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    font-size: 13px;
+  }
+
+  .send-tile-name {
+    padding-right: 18px;
+  }
+
+  .send-tile[data-closed="true"] .send-tile-price {
+    display: none;
+  }
+}
+
+@media (min-width: 640px) {
+  .send-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Chips */
+.send-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.send-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 64px;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: 600 15px/1 var(--font-body);
+  cursor: pointer;
+  transition:
+    border-color 150ms,
+    color 150ms;
+}
+
+.send-chip:hover {
+  border-color: var(--ink-muted);
+}
+
+.send-chip[aria-pressed="true"],
+.send-chip[aria-pressed="true"]:hover,
+.send-chip[data-selected="true"],
+.send-chip[data-selected="true"]:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.send-chip-input {
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  cursor: text;
+}
+
+.send-chip-field {
+  width: 8ch;
+  border: 0;
+  background: transparent;
+  color: var(--gold);
+  font: 600 15px/1 var(--font-mono);
+}
+
+.send-chip-field::placeholder {
+  color: var(--ink-muted);
+}
+
+.send-page .send-chip-field:focus-visible {
+  outline: none;
+}
+
+.send-chip-input:has(:focus-visible) {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* The note */
+.send-textarea {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--ink);
+  font: 400 16px/1.5 var(--font-body);
+  resize: vertical;
+  transition: border-color 150ms;
+}
+
+.send-textarea::placeholder {
+  color: var(--ink-muted);
+}
+
+.send-textarea:hover {
+  border-color: var(--ink-muted);
+}
+
+.send-page .send-textarea:focus,
+.send-page .send-textarea:focus-visible {
+  border-color: var(--gold);
+  outline: none;
+}
+
+.send-counter {
+  margin: 8px 0 0;
+  color: var(--ink-muted);
+  font: 400 12px/1 var(--font-mono);
+  text-align: right;
+}
+
+/* What the sender pays */
+.send-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: 400 13px/1.5 var(--font-mono);
+}
+
+.send-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+
+.send-summary-row dt {
+  color: var(--ink-muted);
+}
+
+.send-summary-row dd {
+  margin: 0;
+  color: var(--ink);
+}
+
+/* The preview */
+.send-cert {
+  max-width: 600px;
+}
+
+.send-preview-note {
+  max-width: 600px;
+  margin: 24px 0 0;
+  color: var(--ink);
+  font-size: 20px;
+  font-style: italic;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The call sheet */
+.send-sheet {
+  max-width: 600px;
+}
+
+.send-card + .send-sheet,
+.send-error + .send-sheet {
+  margin-top: 40px;
+}
+
+.send-rows {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.send-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.send-row-label {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  color: var(--ink);
+  font: 400 16px/1.3 var(--font-body);
+}
+
+.send-row[data-state="waiting"] .send-row-label {
+  color: var(--ink-muted);
+}
+
+.send-row-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-height: 56px;
+  color: var(--ink);
+  font: 400 14px/1.3 var(--font-body);
+  text-align: right;
+}
+
+.send-dot {
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--ink-muted);
+  border-radius: 50%;
+}
+
+.send-ring {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--gold);
+  border-radius: 50%;
+  animation: send-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes send-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.send-spin {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: send-turn 1s linear infinite;
+}
+
+@keyframes send-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.send-done {
+  flex: none;
+  color: var(--ok);
+}
+
+.send-failed {
+  flex: none;
+  color: var(--error);
+}
+
+.send-hash {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+/* Added to the page once the row has waited 20 seconds */
+.send-row-late {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding-bottom: 12px;
+  color: var(--ink-muted);
+  font: 400 13px/1.4 var(--font-body);
+  animation: send-reveal 300ms ease-out both;
+}
+
+@keyframes send-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The finished gift */
+.send-card-title {
+  margin: 0 0 24px;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.send-card {
+  max-width: 600px;
+}
+
+.send-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+
+.send-field-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+  font: 400 14px/1.5 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.send-card-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.send-card-actions .send-primary,
+.send-card-actions .send-secondary {
+  flex: 1;
+  width: auto;
+}
+
+.send-wrapfail .send-secondary-inline {
+  margin-top: 16px;
+}
+
+/* A send that stopped */
+.send-error {
+  max-width: 600px;
+  padding: 16px;
+  border: 1px solid var(--error);
+  border-radius: 8px;
+}
+
+.send-error-title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.send-error-text {
+  margin: 8px 0 16px;
+  color: var(--ink);
+  font: 400 16px/1.55 var(--font-body);
+  overflow-wrap: anywhere;
+}
+
+.send-error .send-label-small {
+  margin-top: 16px;
+  margin-bottom: 0;
+}
+
+/* The recovery banner */
+.send-banner {
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+}
+
+.send-banner-text {
+  margin: 0;
+  color: var(--ink);
+  font: 400 16px/1.5 var(--font-body);
+}
+
+.send-banner-result {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font: 400 15px/1.5 var(--font-body);
+  overflow-wrap: anywhere;
+}
+
+.send-banner-line {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* Gifts this wallet has sent */
+.send-gifts {
+  margin-top: 56px;
+}
+
+.send-gift-list {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.send-gift {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.send-gift-id {
+  color: var(--ink);
+  font: 400 13px/1.5 var(--font-mono);
+}
+
+.send-gift-symbol {
+  color: var(--ink-muted);
+  font: 400 13px/1.5 var(--font-mono);
+}
+
+.send-gift-state {
+  color: var(--ink);
+  font: 400 14px/1.5 var(--font-body);
+}
+
+.send-gift-actions {
+  display: flex;
+  gap: 20px;
+  margin-left: auto;
+}
+
+.send-gift-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 13px/1.4 var(--font-body);
+}
+
+/* Blocks that appear rise in over 500 ms */
+.send-rise {
+  animation: send-rise 500ms cubic-bezier(0.215, 0.61, 0.355, 1) both;
+}
+
+@keyframes send-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Reduced motion: the end state with no motion */
+@media (prefers-reduced-motion: reduce) {
+  .send-page .hero-grain,
+  .send-tile-skeleton,
+  .send-ring,
+  .send-spin,
+  .send-row-late,
+  .send-rise {
+    animation: none;
+  }
+
+  .send-link::after,
+  .send-primary,
+  .send-secondary,
+  .send-tile,
+  .send-chip,
+  .send-textarea {
+    transition: none;
+  }
+}
+
+.send-card > .send-link {
+  margin-top: 20px;
+}

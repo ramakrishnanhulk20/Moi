@@ -27,7 +27,11 @@ const mono = JetBrains_Mono({
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Moi",
+  metadataBase: new URL(process.env.MOI_PUBLIC_ORIGIN || "http://localhost:3000"),
+  title: { default: "Moi: give someone their first stock", template: "%s · Moi" },
+  description: "Send a real share of Nvidia, Apple or the S&P 500 as a link. Your friend opens it, signs in with Google, and owns it.",
+  openGraph: { type: "website", siteName: "Moi" },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

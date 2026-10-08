@@ -38,7 +38,7 @@ function contentSecurityPolicy(nonce: string): string {
     "default-src 'self'",
     ["script-src 'self'", `'nonce-${nonce}'`, "'strict-dynamic'", TURNSTILE, ...DEV_EVAL].join(" "),
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https://*.bnbstatic.com",
+    "img-src 'self' data: blob: https://*.bnbstatic.com https://explorer-api.walletconnect.com",
     "font-src 'self'",
     ["connect-src 'self'", BSC_RPC_ORIGIN, ...PRIVY_CONNECT].join(" "),
     ["child-src", ...PRIVY_FRAMES].join(" "),
