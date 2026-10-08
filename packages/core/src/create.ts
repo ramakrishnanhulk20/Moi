@@ -15,6 +15,8 @@ import { MAX_NOTE_BYTES } from "./gift.js";
 
 /** The largest gift Moi builds, in US dollars of USDT. */
 export const MAX_GIFT_USD = "100";
+/** The smallest gift, in US dollars, that /api/quote accepts. */
+export const MIN_GIFT_USD = "1";
 
 // GiftVault MAX_LIFETIME. The vault checks expiry <= block.timestamp + MAX_LIFETIME, and block time
 // only grows after signing, so an expiry that passes here still passes at inclusion.

@@ -14,7 +14,9 @@
     "serve": "tsx scripts/serve.ts",
     "judge-gifts": "tsx scripts/create-judge-gifts.ts",
     "gen-abi": "tsx scripts/gen-abi.ts",
-    "test:fork": "vitest run test/claim.fork.test.ts"
+    "check:b402": "tsx scripts/check-b402-payload.ts",
+    "test:fork": "vitest run test/claim.fork.test.ts",
+    "attacks": "tsx scripts/attacks/run.ts"
   },
   "dependencies": {
     "jose": "6.2.12",

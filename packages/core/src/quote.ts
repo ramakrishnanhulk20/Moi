@@ -4,7 +4,7 @@ import { parseAmount } from "./amounts.js";
 import { BuyRefusedError, planBuy, simulate, type SimulationResult } from "./buy.js";
 import { readTokenInfo, USDT } from "./chain.js";
 import { checkSwapSimulation } from "./checks.js";
-import { buildApproveVaultTx, MAX_GIFT_USD } from "./create.js";
+import { buildApproveVaultTx, MAX_GIFT_USD, MIN_GIFT_USD } from "./create.js";
 import { checkEligibility } from "./eligibility.js";
 import { readListedTokens } from "./vault.js";
 import { Web3ApiError, type Web3Api } from "./web3api.js";
@@ -78,8 +78,6 @@ const bodySchema = z.strictObject({
   usdAmount: z.string().max(40),
   wallet: z.string().max(42),
 });
-
-const MIN_GIFT_USD = "1";
 
 const fail = (error: QuoteErrorCode): QuoteResponse => ({ status: STATUS[error], body: { ok: false, error } });
 
