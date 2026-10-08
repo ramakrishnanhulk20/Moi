@@ -35,7 +35,7 @@ cd packages/contracts && sh install-deps.sh && forge test
 | A real bStock bought through the Binance Trading API on BSC mainnet | Done: [tx](https://bscscan.com/tx/0x6a1623c52a0403c6aba600d8cf35fbc77a8830f614138152066c7a7d906aa9f3) |
 | GiftVault on BSC mainnet | Live at [0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C](https://bscscan.com/address/0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C), source verified on Sourcify (exact match) |
 | End to end on mainnet | Proved: buy, gift and gas-free claim into a brand-new wallet ([claim tx](https://bscscan.com/tx/0x6a13e2e8f14630a8a4777bf7bae7befa21154fe64ba0e64d58a7ccdca71978e8)) |
-| b402 wrapping, judge gifts, sender agent | Built and tested on a mainnet fork |
+| Agentic Wallet sender agent with b402 | Proved: gift 2 made by the Binance Agentic Wallet, wrapped with a real b402 payment ([settlement](https://bscscan.com/tx/0x8ec1e0666350aa500bbf2f7d36b1cd97bb8dfb2e9fd5ba328b75b899a36c38d6)), claimed gas-free ([claim](https://bscscan.com/tx/0x660e8ebcc983db623db05e87fa7e0c7f4583ff208f7fdb884864d86c0825e28e)) |
 | Website | Not started |
 
 MIT licence.
