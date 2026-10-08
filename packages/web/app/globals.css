@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0e0809;
+  --bg-raised: #1a1012;
+  --ink: #f6efe6;
+  --ink-muted: #b9aea4;
+  --gold: #f2b13d;
+  --gold-deep: #c8891e;
+  --maroon: #4a1420;
+  --line: rgba(246, 239, 230, 0.12);
+  --ok: #3fb8a6;
+  --pending: #8fa3b8;
+  --error: #c46a86;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-raised: var(--bg-raised);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-gold: var(--gold);
+  --color-gold-deep: var(--gold-deep);
+  --color-maroon: var(--maroon);
+  --color-line: var(--line);
+  --color-ok: var(--ok);
+  --color-pending: var(--pending);
+  --color-error: var(--error);
+}
+
+/*
+ * next/font sets --font-display, --font-body and --font-mono on <html> outside any cascade layer,
+ * so its values win over these layered fallbacks, and the font-display, font-body and font-mono
+ * utilities follow whatever next/font loaded.
+ */
+@theme {
+  --radius-button: 8px;
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-body: ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
