@@ -9,7 +9,8 @@ import type { Web3Api } from "./web3api.js";
 export const MIN_BNB_FOR_BUY = 2_000_000_000_000_000n; // 0.002 BNB covers both transactions many times over at BSC prices
 export const MAX_BUY_GAS_PRICE_WEI = 3_000_000_000n; // 3 gwei; BSC runs near 0.06 gwei, so anything above this is a bad node or a bad day
 const MAX_APPROVE_GAS = 100_000n;
-const MAX_SWAP_GAS = 1_000_000n;
+// WHY 1.5M: on 2026-10-08 a live route needed about 806,000 gas, which the 1.3 buffer put over 1M.
+const MAX_SWAP_GAS = 1_500_000n;
 const RECEIPT_TIMEOUT_MS = 90_000;
 
 // Upstream names (vendors, DEX names, symbols) go to a terminal: printable characters only.

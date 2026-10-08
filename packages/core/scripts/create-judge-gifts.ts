@@ -43,7 +43,7 @@ function say(line = ""): void {
   console.log(redact(line));
 }
 
-type Settings = { count: number; stock: Address; usdEach: string; seed: `0x${string}` | null };
+type Settings = { start: number; count: number; stock: Address; usdEach: string; seed: `0x${string}` | null };
 
 // Read by name from the environment loadEnv filled. A bad value is reported by variable name
 // only (EnvError), never echoed, because MOI_JUDGE_SEED sits next to the others.
@@ -52,6 +52,10 @@ function judgeSettings(source: Record<string, string | undefined>): Settings {
   const countText = source.MOI_JUDGE_COUNT || DEFAULT_COUNT;
   const count = /^[1-9][0-9]?$/.test(countText) ? Number(countText) : 0;
   if (count < 1 || count > MAX_JUDGE_INDEX + 1) bad.push("MOI_JUDGE_COUNT");
+  // WHY a start index: a run that stops part way leaves its keys used, so the next run resumes after them.
+  const startText = source.MOI_JUDGE_START || "0";
+  const start = /^(0|[1-9][0-9]?)$/.test(startText) ? Number(startText) : -1;
+  if (start < 0 || start + count - 1 > MAX_JUDGE_INDEX) bad.push("MOI_JUDGE_START");
   let stock = getAddress(NVDAB);
   try {
     stock = getAddress(source.MOI_JUDGE_STOCK || NVDAB);
@@ -64,7 +68,7 @@ function judgeSettings(source: Record<string, string | undefined>): Settings {
   if (seedText !== null) secrets.push(seedText, seedText.slice(2));
   if (seedText !== null && !/^0x[0-9a-fA-F]{64}$/.test(seedText)) bad.push("MOI_JUDGE_SEED");
   if (bad.length > 0) throw new EnvError(bad);
-  return { count, stock, usdEach, seed: seedText as `0x${string}` | null };
+  return { start, count, stock, usdEach, seed: seedText as `0x${string}` | null };
 }
 
 async function judgeKey(seed: `0x${string}`, index: number): Promise<{ key: `0x${string}`; address: Address }> {
@@ -171,7 +175,7 @@ async function main(): Promise<number> {
   const usdtAmount = parseAmount(settings.usdEach, usdt.decimals);
   if (usdtAmount > parseAmount(MAX_GIFT_USD, usdt.decimals)) throw new EnvError(["MOI_JUDGE_USD_EACH"]);
   const symbol = clean(stockInfo.symbol);
-  say(`Gifts: ${settings.count} x ${settings.usdEach} USDT of ${symbol} (${settings.stock}), judge key indices 0 to ${settings.count - 1}`);
+  say(`Gifts: ${settings.count} x ${settings.usdEach} USDT of ${symbol} (${settings.stock}), judge key indices ${settings.start} to ${settings.start + settings.count - 1}`);
   say(`Each gift: expiry 30 days after the latest block at creation; note, sealed so only that gift's key opens it: "${NOTE}"`);
 
   let vaultReady = false;
@@ -189,11 +193,11 @@ async function main(): Promise<number> {
       const seed = settings.seed;
       const flags = await Promise.all(
         Array.from({ length: settings.count }, async (_, i) => {
-          const judge = await judgeKey(seed, i);
+          const judge = await judgeKey(seed, settings.start + i);
           return client.readContract({ address: vault, abi: giftVaultAbi, functionName: "claimKeyUsed", args: [judge.address] });
         }),
       );
-      flags.forEach((usedFlag, i) => usedFlag && usedIndices.push(i));
+      flags.forEach((usedFlag, i) => usedFlag && usedIndices.push(settings.start + i));
       say(`Judge keys already used on this vault: ${usedIndices.length === 0 ? "none" : `${usedIndices.join(", ")} (a live run refuses)`}`);
     }
   }
@@ -222,8 +226,8 @@ async function main(): Promise<number> {
   const l: Live = { api, client, walletClient, sponsor, vault, stock: settings.stock, stockInfo, usdtAmount, usdEach: settings.usdEach, seed: settings.seed };
   const entries: string[] = [];
   try {
-    for (let i = 0; i < settings.count; i += 1) {
-      say(`Judge gift ${i + 1} of ${settings.count} (index ${i}):`);
+    for (let i = settings.start; i < settings.start + settings.count; i += 1) {
+      say(`Judge gift ${i - settings.start + 1} of ${settings.count} (index ${i}):`);
       entries.push(`${await createJudgeGift(l, i)}:${i}`);
     }
   } catch (err) {
