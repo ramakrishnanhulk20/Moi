@@ -11,7 +11,7 @@ import {
 } from "viem";
 import { z } from "zod";
 import { parseAmount } from "./amounts.js";
-import { assertChain } from "./chain.js";
+import { assertChain, B402_PERMIT2_SPENDER } from "./chain.js";
 import { parseGiftId } from "./gift.js";
 import { keys, type KvStore, type StoreKey } from "./store.js";
 import { readGift } from "./vault.js";
@@ -113,7 +113,11 @@ async function fetchKinds(api: Web3Api): Promise<Kind[]> {
   for (const raw of kinds) {
     const kind = kindSchema.safeParse(raw);
     if (!kind.success) continue;
-    usable.push({ name: kind.data.extra.name, extra: structuredClone((raw as { extra: Record<string, unknown> }).extra) });
+    // WHY (C21, C27): the spender is who Permit2 lets pull the buyer's tokens. A /supported answer
+    // is upstream text, so a permit2-exact kind passes on only when it names b402's own contract.
+    const extra = kind.data.extra;
+    if (extra.assetTransferMethod === "permit2-exact" && getAddress(extra.spenderAddress) !== B402_PERMIT2_SPENDER) continue;
+    usable.push({ name: extra.name, extra: structuredClone((raw as { extra: Record<string, unknown> }).extra) });
   }
   return usable;
 }
@@ -188,7 +192,8 @@ export function wrapResource(origin: string, giftId: bigint): { url: string; des
 /**
  * The 402 payment requirements for wrapping gift `giftId`: one per "exact" kind on eip155:56 in
  * b402's /supported answer (cached 10 minutes per api client) whose EIP-712 name is in WRAP_ASSETS,
- * in /supported order. Each carries the price in that asset's decimals by integer math (the
+ * in /supported order. A permit2-exact kind whose spenderAddress is not chain.ts
+ * B402_PERMIT2_SPENDER (getAddress on both sides) is dropped. Each carries the price in that asset's decimals by integer math (the
  * stablecoins are taken at one dollar each), the payee from config, a 120-second timeout and the
  * kind's `extra` copied verbatim. Built only from config and the parsed gift id, never from a
  * request header (C24); the resource URL lives beside the list (wrapResource), as x402 v2 and

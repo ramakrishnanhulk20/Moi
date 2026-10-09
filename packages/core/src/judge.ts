@@ -15,7 +15,7 @@ import {
   RelayerInputError,
   type createRelayer,
 } from "./relayer.js";
-import { keys, StoreError, type KvStore, type StoreKey } from "./store.js";
+import { keys, type KvStore, type StoreKey } from "./store.js";
 import { readGift } from "./vault.js";
 
 /** Thrown for a judge seed, index or pool setting that cannot be used. Messages never carry the seed. */
@@ -179,8 +179,10 @@ export type JudgeClaimErrorCode =
   | "unknown_network"
   | "already_claimed"
   | "too_many_from_network"
+  | "judges_busy"
   | "pool_empty"
   | "try_again"
+  | "claim_pending"
   | "gift_expiring"
   | "claim_refused"
   | "busy"
@@ -213,8 +215,10 @@ const STATUS: Record<JudgeClaimErrorCode, number> = {
   unknown_network: 403,
   already_claimed: 409,
   too_many_from_network: 429,
+  judges_busy: 429,
   pool_empty: 410,
   try_again: 503,
+  claim_pending: 202,
   gift_expiring: 409,
   claim_refused: 409,
   busy: 429,
@@ -262,8 +266,13 @@ export { judgeWalletMessage };
 
 const DAY_SECONDS = 24 * 60 * 60;
 const USER_TTL_SECONDS = 30 * DAY_SECONDS;
-const IP_TTL_SECONDS = 2 * DAY_SECONDS;
+const NETWORK_TTL_SECONDS = 2 * DAY_SECONDS;
 const GIFT_TTL_SECONDS = 90 * DAY_SECONDS;
+// A judging panel claims a handful of gifts over several days. More than four in one hour is a
+// script rotating networks, and the cap holds whatever addresses it has.
+const MAX_HANDOUTS_PER_HOUR = 4n;
+// Two hours, so an hour's counter outlives its hour and then expires.
+const HOUR_COUNTER_TTL_SECONDS = 2 * 60 * 60;
 // A gift handed out with less than this left could expire between the tap and inclusion.
 const MIN_SECONDS_LEFT = 10n * 60n;
 const TX_HASH_TEXT = /^0x[0-9a-f]{64}$/;
@@ -282,6 +291,7 @@ const UNKNOWN_CLIENT = "unknown";
 const IP_TEXT = /^[0-9a-fA-F:.]{2,45}$/;
 const DOTTED_IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 const MAPPED_IPV4 = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/;
+const HEXTET = /^[0-9a-f]{1,4}$/;
 
 const fail = (error: JudgeClaimErrorCode): JudgeClaimResponse => ({ status: STATUS[error], body: { ok: false, error } });
 
@@ -323,6 +333,29 @@ export function canonicalClientIp(raw: unknown): string | null {
   }
 }
 
+/**
+ * The network the per-network judge limit counts a canonicalClientIp address under. IPv4 is its own
+ * address (/32). IPv6 is its first 64 bits, written as the first four hextets of the expanded
+ * address ("2001:0db8:0001:0002"). WHY /64: one home or mobile line is handed a whole /64, so one
+ * machine can rotate through more addresses inside it than the pool holds gifts. Null for text
+ * that is not canonicalClientIp output.
+ */
+function clientNetwork(ip: string): string | null {
+  if (!ip.includes(":")) return DOTTED_IPV4.test(ip) ? ip : null;
+  const halves = ip.split("::");
+  if (halves.length > 2) return null;
+  const left = halves[0] === "" ? [] : (halves[0] ?? "").split(":");
+  const right = halves.length === 1 || halves[1] === "" ? [] : (halves[1] ?? "").split(":");
+  const missing = 8 - left.length - right.length;
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return null;
+  const hextets = [...left, ...Array<string>(missing).fill("0"), ...right];
+  if (!hextets.every((h) => HEXTET.test(h))) return null;
+  return hextets
+    .slice(0, 4)
+    .map((h) => h.padStart(4, "0"))
+    .join(":");
+}
+
 // The verifier's answer is read like input (standard 3): a custom verifier, or a future change to
 // privy.ts, must still hand back a user id the signed message can hold.
 function checkedUserId(value: unknown): string {
@@ -338,14 +371,16 @@ function identityErrorCode(err: unknown): JudgeClaimErrorCode {
   return "bad_token";
 }
 
-function relayerErrorCode(err: unknown): JudgeClaimErrorCode {
+// The relayer's own refusals, each thrown before anything is signed (relayer.ts). Null for every
+// other failure, because a timeout, a node naming another hash or a store error can each come
+// after the claim was broadcast.
+function refusalCode(err: unknown): JudgeClaimErrorCode | null {
   if (err instanceof ClaimRefusedError) return err.name === "GiftExpiring" ? "gift_expiring" : "claim_refused";
   if (err instanceof RelayerBusyError) return "busy";
   if (err instanceof DailyCapReachedError) return "daily_cap";
   if (err instanceof GasPriceTooHighError) return "gas_price_high";
   if (err instanceof RelayerInputError) return "claim_refused";
-  if (err instanceof StoreError) return "store_unavailable";
-  return "chain_unavailable";
+  return null;
 }
 
 type JudgeDeps = {
@@ -429,17 +464,25 @@ async function judgeCodeRefusal(deps: JudgeDeps, body: unknown, ctx: JudgeCtx): 
  *    judge reusing a proof; the per-user mark in step 4 stops the same judge reusing it;
  * 4. the client address in one canonical form (403 unknown_network, before any store write), then
  *    one gift per Privy user for 30 days (409 already_claimed) and one per network per UTC day
- *    (429 too_many_from_network, the user's mark released first). Only keyed hashes (hashClientId
- *    under `clientHashKey`) of the user id and the address are stored (C25, C46);
+ *    (429 too_many_from_network, the user's mark released first). A network is an IPv4 address
+ *    itself, or the first 64 bits of an IPv6 address. Only keyed hashes (hashClientId under
+ *    `clientHashKey`) of the user id and the network are stored (C25, C46). Then the vault's
+ *    handout count for the UTC hour (keys.judgeHour, 2-hour TTL) goes up by one; above 4 it is
+ *    given back, the marks are released and the answer is 429 judges_busy. Every later answer that
+ *    hands nothing out gives the count back too;
  * 5. pool gifts in ascending id order, each taken atomically for 90 days so no two judges ever
  *    get the same one; a taken gift that is not Open, has under 10 minutes left by the latest
  *    block, or whose stored claim key is not its pool index's key stays taken and is skipped.
  *    None left: the user and network marks are released and the answer is 410 pool_empty;
  * 6. the claim is signed with deriveJudgeKey(seed, index) for (vault, 56, giftId, recipient) and
- *    sent through the relayer. On any refusal or error the gift, user and network marks are
- *    released so the judge can retry. A relayer answer that reuses an earlier claim belongs to
- *    another request: the gift stays taken, the judge's marks are released, and the answer is
- *    503 try_again;
+ *    sent through the relayer. On a relayer refusal thrown before anything is sent
+ *    (ClaimRefusedError, RelayerBusyError, DailyCapReachedError, GasPriceTooHighError,
+ *    RelayerInputError) the gift, user and network marks are released so the judge can retry. Any
+ *    other relayer error (a timeout, a node naming another hash, a store error) may follow a
+ *    broadcast, so every mark and the hour's count stay and the answer is 202 claim_pending; a
+ *    retry by the same judge is then 409 already_claimed (F1). A relayer answer that reuses an
+ *    earlier claim belongs to another request: the gift stays taken, the judge's marks are
+ *    released, and the answer is 503 try_again;
  * 7. 200 {ok: true, giftId (decimal text), txHash}. A 200 means "submitted"; the page confirms the
  *    receipt with relayer.ts confirmClaim before it says "claimed" (C16).
  * Never throws. Every refusal is a fixed code, and the seed, every derived key, the access token
@@ -512,11 +555,14 @@ async function judgeClaim(deps: JudgeDeps, body: unknown, ctx: JudgeCtx): Promis
     return fail("server_misconfigured");
   }
   const ip = canonicalClientIp(ctx?.clientIp);
-  if (ip === null) return fail("unknown_network");
-  const day = now().toISOString().slice(0, 10);
-  const [userHash, ipHash] = await Promise.all([hashClientId(deps.clientHashKey, userId), hashClientId(deps.clientHashKey, ip)]);
+  const network = ip === null ? null : clientNetwork(ip);
+  if (network === null) return fail("unknown_network");
+  // One reading of the clock, so the day and the hour can never fall either side of midnight.
+  const at = now().toISOString();
+  const [userHash, networkHash] = await Promise.all([hashClientId(deps.clientHashKey, userId), hashClientId(deps.clientHashKey, network)]);
   const userKey = keys.judgeUser(vault, userHash);
-  const ipKey = keys.judgeIpDay(vault, ipHash, day);
+  const networkKey = keys.judgeNetworkDay(vault, networkHash, at.slice(0, 10));
+  const hourKey = keys.judgeHour(vault, at.slice(0, 13));
   const mark = globalThis.crypto.randomUUID();
 
   // Only a mark this request wrote is removed, so a release can never free another judge's mark.
@@ -538,15 +584,48 @@ async function judgeClaim(deps: JudgeDeps, body: unknown, ctx: JudgeCtx): Promis
     return fail("store_unavailable");
   }
   try {
-    if (!(await deps.store.setNx(ipKey, mark, IP_TTL_SECONDS))) {
+    if (!(await deps.store.setNx(networkKey, mark, NETWORK_TTL_SECONDS))) {
       await release([userKey]);
       return fail("too_many_from_network");
     }
   } catch {
-    await release([userKey, ipKey]);
+    await release([userKey, networkKey]);
     return fail("store_unavailable");
   }
-  const judgeMarks = [userKey, ipKey];
+  const judgeMarks = [userKey, networkKey];
+
+  // WHY (C26): the per-network mark costs a script one network per gift, and a rented block of
+  // addresses has many. This count caps every handout in the hour, whatever addresses ask.
+  let counted = false;
+  // Frees the judge's marks and any gift in `taken`, and gives back this request's place in the
+  // hour. Used on every answer that hands nothing out; a 200 and a claim_pending keep everything.
+  const releaseAll = async (taken: StoreKey[] = []) => {
+    await release([...judgeMarks, ...taken]);
+    if (!counted) return;
+    try {
+      await deps.store.incrBy(hourKey, -1n, HOUR_COUNTER_TTL_SECONDS);
+    } catch {
+      // The counter expires within two hours, so a missed give-back only makes the cap stricter.
+    }
+  };
+  try {
+    const handouts = await deps.store.incrBy(hourKey, 1n, HOUR_COUNTER_TTL_SECONDS);
+    counted = true;
+    if (typeof handouts !== "bigint") {
+      await releaseAll();
+      return fail("store_unavailable");
+    }
+    if (handouts > MAX_HANDOUTS_PER_HOUR) {
+      await releaseAll();
+      return fail("judges_busy");
+    }
+  } catch {
+    // Not given back: an add that threw may still have landed, and one count too many only makes
+    // the cap stricter (fail closed).
+    await release(judgeMarks);
+    return fail("store_unavailable");
+  }
+
   // The gift this request holds and has not yet judged or claimed, released with the judge's own
   // marks if anything below throws where no step expected it.
   let inFlight: StoreKey | null = null;
@@ -558,7 +637,7 @@ async function judgeClaim(deps: JudgeDeps, body: unknown, ctx: JudgeCtx): Promis
       try {
         if (!(await deps.store.setNx(taken, mark, GIFT_TTL_SECONDS))) continue;
       } catch {
-        await release([...judgeMarks, taken]);
+        await releaseAll([taken]);
         return fail("store_unavailable");
       }
       inFlight = taken;
@@ -576,35 +655,43 @@ async function judgeClaim(deps: JudgeDeps, body: unknown, ctx: JudgeCtx): Promis
         // that does not match its key), so it stays taken and no later judge spends a read on it.
         inFlight = null;
       } catch (err) {
-        await release([...judgeMarks, taken]);
+        await releaseAll([taken]);
         return fail(err instanceof JudgeConfigError ? "server_misconfigured" : "chain_unavailable");
       }
     }
     if (chosen === null) {
-      await release(judgeMarks);
+      await releaseAll();
       return fail("pool_empty");
     }
 
+    // Signed before the relayer is called, so a signing failure reaches the catch below that frees
+    // everything: nothing can have been sent yet.
+    const signature = await signClaim(chosen.claimKey, vault, CHAIN_ID, chosen.giftId, recipient);
     try {
-      const signature = await signClaim(chosen.claimKey, vault, CHAIN_ID, chosen.giftId, recipient);
       const result = await deps.relayer.submitClaim({ giftId: chosen.giftId, recipient, signature });
       if (typeof result?.txHash !== "string" || !TX_HASH_TEXT.test(result.txHash) || typeof result.reused !== "boolean") {
-        await release([...judgeMarks, chosen.taken]);
+        await releaseAll([chosen.taken]);
         return fail("relayer_unavailable");
       }
       if (result.reused) {
         // WHY: a reused claim was sent by an earlier request, maybe to another wallet, so it is not
         // this judge's gift. The gift stays taken; the judge may retry and get the next one.
-        await release(judgeMarks);
+        await releaseAll();
         return fail("try_again");
       }
       return { status: 200, body: { ok: true, giftId: chosen.giftId.toString(), txHash: result.txHash } };
     } catch (err) {
-      await release([...judgeMarks, chosen.taken]);
-      return fail(relayerErrorCode(err));
+      const refused = refusalCode(err);
+      if (refused === null) {
+        // WHY (F1): the claim may be on chain. Freeing the marks would let this judge retry and be
+        // handed the next gift as well, so the judge, the network and the gift all stay marked.
+        return fail("claim_pending");
+      }
+      await releaseAll([chosen.taken]);
+      return fail(refused);
     }
   } catch {
-    await release(inFlight === null ? judgeMarks : [...judgeMarks, inFlight]);
+    await releaseAll(inFlight === null ? [] : [inFlight]);
     return fail("server_misconfigured");
   }
 }

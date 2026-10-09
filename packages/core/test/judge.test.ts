@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CLAIM_TYPES, claimDomain } from "../src/gift.js";
 import { canonicalClientIp, deriveClientHashKey, deriveJudgeKey, handleJudgeClaim, hashClientId, JudgeConfigError, judgeWalletMessage, parseJudgePool } from "../src/judge.js";
 import { PrivyTokenError, type verifyPrivyAccessToken } from "../src/privy.js";
-import { RelayerBusyError, type createRelayer } from "../src/relayer.js";
+import { ClaimRefusedError, DailyCapReachedError, GasPriceTooHighError, RelayerBusyError, RelayerInputError, type createRelayer } from "../src/relayer.js";
 import { createMemoryStore, keys, StoreError, type KvStore } from "../src/store.js";
 
 const SEED = `0x${"5a".repeat(32)}` as const;
@@ -224,9 +224,11 @@ async function setup(giftIds: bigint[], opts: { judges?: number; overrides?: Rec
   const claim = async (j: Judge, ip = "203.0.113.7", extra: ProofOptions & { country?: string | null } = {}) =>
     handleJudgeClaim(deps, await judgeBody(j, extra), { country: extra.country === undefined ? "IN" : extra.country, clientIp: ip });
   const userKey = async (j: Judge) => keys.judgeUser(VAULT, await hashClientId(HASH_KEY, j.userId));
-  const ipKey = async (ip: string) => keys.judgeIpDay(VAULT, await hashClientId(HASH_KEY, ip), DAY);
+  // An IPv4 client's network is its own address, so this is that address's per-network key.
+  const ipKey = async (ip: string) => keys.judgeNetworkDay(VAULT, await hashClientId(HASH_KEY, ip), DAY);
   const giftKey = (id: bigint) => keys.judgeGiftTaken(VAULT, id);
-  return { ...w, judges, verifier, relayer, store, writes, deps, claim, userKey, ipKey, giftKey };
+  const hourKey = keys.judgeHour(VAULT, TODAY.toISOString().slice(0, 13));
+  return { ...w, judges, verifier, relayer, store, writes, deps, claim, userKey, ipKey, giftKey, hourKey };
 }
 
 describe("handleJudgeClaim", () => {
@@ -265,14 +267,40 @@ describe("handleJudgeClaim", () => {
     expect((await t.claim(second, "198.51.100.9")).status).toBe(200);
   });
 
+  it("counts an IPv6 client by its /64: a second judge in the same /64 that day gets 429, one in another /64 passes", async () => {
+    const t = await setup([101n, 102n, 103n], { judges: 4 });
+    const [first, sameNet, spelledOut, otherNet] = t.judges as [Judge, Judge, Judge, Judge];
+    expect((await t.claim(first, "2001:db8:1:2::1")).body).toMatchObject({ ok: true, giftId: "101" });
+    expect(await t.claim(sameNet, "2001:db8:1:2:ffff:ffff:ffff:fffe")).toEqual({ status: 429, body: { ok: false, error: "too_many_from_network" } });
+    expect(await t.store.get(await t.userKey(sameNet))).toBeNull();
+    expect((await t.claim(spelledOut, "2001:0DB8:0001:0002:0000:0000:0000:abcd")).body).toEqual({ ok: false, error: "too_many_from_network" });
+    expect((await t.claim(otherNet, "2001:db8:1:3::1")).body).toMatchObject({ ok: true, giftId: "102" });
+  });
+
+  it("answers the fifth judge claim inside one UTC hour with 429 judges_busy, leaving no mark, and lets it through the next hour", async () => {
+    const t = await setup([101n, 102n, 103n, 104n, 105n, 106n], { judges: 5 });
+    const fifth = t.judges[4]!;
+    for (const [i, j] of t.judges.slice(0, 4).entries()) expect((await t.claim(j, `198.51.100.${i + 1}`)).status).toBe(200);
+    expect(await t.claim(fifth, "198.51.100.5")).toEqual({ status: 429, body: { ok: false, error: "judges_busy" } });
+    expect(await t.store.get(await t.userKey(fifth))).toBeNull();
+    expect(await t.store.get(await t.ipKey("198.51.100.5"))).toBeNull();
+    expect(await t.store.get(t.hourKey)).toBe("4");
+    expect(t.relayer.seen).toHaveLength(4);
+
+    const nextHour = new Date(TODAY.getTime() + 60 * 60_000);
+    const body = await judgeBody(fifth, { issuedAt: stamp(nextHour.getTime() - 30_000) });
+    expect((await handleJudgeClaim({ ...t.deps, now: () => nextHour }, body, { country: "IN", clientIp: "198.51.100.5" })).body).toMatchObject({ ok: true, giftId: "105" });
+  });
+
   it("never gives two concurrent judges the same gift", async () => {
-    const t = await setup([101n, 102n, 103n, 104n, 105n], { judges: 6, relayer: fakeRelayer(undefined, 5) });
+    // Four judges, the most one hour lets through, racing for three gifts.
+    const t = await setup([101n, 102n, 103n], { judges: 4, relayer: fakeRelayer(undefined, 5) });
     const results = await Promise.all(t.judges.map((j, i) => t.claim(j, `198.51.100.${i + 1}`)));
     const given = results.flatMap((r) => (r.body.ok ? [r.body.giftId] : []));
-    expect(new Set(given).size).toBe(5);
-    expect(given.sort()).toEqual(["101", "102", "103", "104", "105"]);
+    expect(new Set(given).size).toBe(3);
+    expect(given.sort()).toEqual(["101", "102", "103"]);
     expect(results.filter((r) => !r.body.ok).map((r) => r.body)).toEqual([{ ok: false, error: "pool_empty" }]);
-    expect(new Set(t.relayer.seen.map((s) => s.giftId)).size).toBe(5);
+    expect(new Set(t.relayer.seen.map((s) => s.giftId)).size).toBe(3);
   });
 
   it("skips a closed, nearly expired or mismatched pool gift and keeps it taken", async () => {
@@ -293,6 +321,7 @@ describe("handleJudgeClaim", () => {
     expect(await t.claim(judge)).toEqual({ status: 410, body: { ok: false, error: "pool_empty" } });
     expect(await t.store.get(await t.userKey(judge))).toBeNull();
     expect(await t.store.get(await t.ipKey("203.0.113.7"))).toBeNull();
+    expect(await t.store.get(t.hourKey)).toBe("0");
     expect(t.relayer.seen).toHaveLength(0);
   });
 
@@ -360,6 +389,43 @@ describe("handleJudgeClaim", () => {
     expect((await t.claim(judge)).body).toMatchObject({ ok: true, giftId: "101" });
   });
 
+  it("still releases every mark on each relayer refusal that is thrown before anything is sent", async () => {
+    const refusals: [Error, string][] = [
+      [new ClaimRefusedError("GiftNotOpen"), "claim_refused"],
+      [new ClaimRefusedError(null, "GiftExpiring"), "gift_expiring"],
+      [new RelayerBusyError(), "busy"],
+      [new DailyCapReachedError(), "daily_cap"],
+      [new GasPriceTooHighError(), "gas_price_high"],
+      [new RelayerInputError("Gift id is not valid."), "claim_refused"],
+    ];
+    for (const [err, code] of refusals) {
+      const t = await setup([101n, 102n], { relayer: fakeRelayer((n) => (n === 1 ? err : { txHash: `0x${"ab".repeat(32)}`, reused: false })) });
+      const [judge] = t.judges as [Judge];
+      expect((await t.claim(judge)).body, code).toEqual({ ok: false, error: code });
+      for (const k of [await t.userKey(judge), await t.ipKey("203.0.113.7"), t.giftKey(101n)]) expect(await t.store.get(k)).toBeNull();
+      expect(await t.store.get(t.hourKey)).toBe("0");
+      expect((await t.claim(judge)).body).toMatchObject({ ok: true, giftId: "101" });
+    }
+  });
+
+  it("keeps every mark when the relayer fails in a way that may follow a broadcast, so a retry never takes a second gift (F1)", async () => {
+    // The claim for gift 101 lands on chain, then the node times out before the relayer can say so.
+    let gifts: Map<bigint, PoolGift> | undefined;
+    const relayer = fakeRelayer((n) => {
+      if (n > 1) return { txHash: `0x${n.toString(16).padStart(64, "0")}`, reused: false };
+      gifts!.get(101n)!.state = STATE.Claimed;
+      return new Error("timeout");
+    });
+    const t = await setup([101n, 102n], { relayer });
+    gifts = t.gifts;
+    const [judge] = t.judges as [Judge];
+    expect(await t.claim(judge)).toEqual({ status: 202, body: { ok: false, error: "claim_pending" } });
+    expect(await t.claim(judge, undefined, { issuedAt: stamp(TODAY.getTime() - 10_000) })).toEqual({ status: 409, body: { ok: false, error: "already_claimed" } });
+    expect(t.relayer.seen.map((s) => s.giftId)).toEqual([101n]);
+    for (const k of [await t.userKey(judge), await t.ipKey("203.0.113.7"), t.giftKey(101n)]) expect(await t.store.get(k)).not.toBeNull();
+    expect(await t.store.get(t.hourKey)).toBe("1");
+  });
+
   it("keeps a gift taken when the relayer reuses an earlier claim, and frees the judge to take the next", async () => {
     const t = await setup([101n, 102n], { relayer: fakeRelayer((n) => ({ txHash: `0x${n.toString(16).padStart(64, "0")}`, reused: n === 1 })) });
     const [judge] = t.judges as [Judge];
@@ -376,7 +442,7 @@ describe("handleJudgeClaim", () => {
     expect(await t.store.get(await t.userKey(judge))).not.toBeNull();
     expect(await t.store.get(await t.ipKey("203.0.113.7"))).not.toBeNull();
     expect(await t.store.get(keys.judgeUser(VAULT, sha(judge.userId)))).toBeNull();
-    expect(await t.store.get(keys.judgeIpDay(VAULT, sha("203.0.113.7"), DAY))).toBeNull();
+    expect(await t.store.get(keys.judgeNetworkDay(VAULT, sha("203.0.113.7"), DAY))).toBeNull();
     const written = t.writes.filter((k) => k.includes(":judgeuser:") || k.includes(":judgeip:"));
     expect(written).toEqual([await t.userKey(judge), await t.ipKey("203.0.113.7")]);
 
@@ -412,7 +478,8 @@ describe("handleJudgeClaim", () => {
       responses.push(await handleJudgeClaim({ ...t.deps, ...deps }, await judgeBody(judge), { country: "IN", clientIp: "203.0.113.7" }));
     await run({ verifyAccessToken: (async (token: string) => Promise.reject(leaky(`bad token ${token}`))) as typeof verifyPrivyAccessToken });
     await run({ verifyAccessToken: (async () => Promise.reject(new PrivyTokenError("expired"))) as typeof verifyPrivyAccessToken });
-    await run({ relayer: fakeRelayer(() => leaky(`relayer saw ${t.derived[0]} and ${SEED}`)).relayer });
+    // A relayer failure that may follow a broadcast keeps the judge's marks (F1), so it runs on its own store.
+    await run({ relayer: fakeRelayer(() => leaky(`relayer saw ${t.derived[0]} and ${SEED}`)).relayer, store: createMemoryStore(() => Number(NOW) * 1000) });
     await run({ relayer: fakeRelayer(() => ({ txHash: "0xnot-a-hash" as Hex, reused: false })).relayer });
     await run({ store: { ...t.store, setNx: async () => Promise.reject(new StoreError(`store saw ${SEED}`)) } });
     await run({ pool: null as unknown as Map<bigint, number> });
@@ -425,7 +492,7 @@ describe("handleJudgeClaim", () => {
     expect(responses.map((r) => (r as { body: unknown }).body)).toEqual([
       { ok: false, error: "auth_unavailable" },
       { ok: false, error: "token_expired" },
-      { ok: false, error: "chain_unavailable" },
+      { ok: false, error: "claim_pending" },
       { ok: false, error: "relayer_unavailable" },
       { ok: false, error: "store_unavailable" },
       { ok: false, error: "server_misconfigured" },

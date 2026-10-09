@@ -297,7 +297,7 @@ C14. No attacker-influenced value runs as code on the Moi origin.
   clickable.
 - A logo URL is used only when the standard URL parser reports https and a host Moi expects.
 - A Content Security Policy forbids inline script and every third-party script except the wallet
-  provider's, and it limits where the claim page can send data.
+  provider's and its bot check (Cloudflare Turnstile), and it limits where the claim page can send data.
 
 This covers script injection through notes and upstream strings. It does not cover a compromised
 dependency in Moi's own build (N2).
@@ -350,6 +350,11 @@ C21. Every transaction Moi hands a sender is checked as if the sender had typed 
 - the swap's output token is the requested stock, and its recipient is the sender's own address
 - a minimum output within a stated slippage of the quote, and a deadline
 - the vault address comes from Moi's own constant, never from a response
+- a Permit2 wrap payment names one spender only: b402's settlement contract
+  0x3038f7ac3b4D1a3fe886BdCB5cD01e9f6BDd8633, pinned in chain.ts as B402_PERMIT2_SPENDER. Gift 2's wrap
+  payment proves it: transaction 0x8ec1e0666350aa500bbf2f7d36b1cd97bb8dfb2e9fd5ba328b75b899a36c38d6 went
+  to that contract and succeeded, and its Permit2 signature recovers to the payer only with that spender.
+  The server drops a /supported kind that names any other spender, and the browser refuses to sign one
 
 A quote that fails any check is refused, not repaired.
 
@@ -383,6 +388,16 @@ C26. One person gets at most one judge gift, and a script cannot empty the pool.
 - Each handout is atomic, so no key goes to two visitors.
 - A response carrying a key is never cached by a CDN or rendered at build time.
 - Judge keys live in server secrets, never in the repo, the client bundle or logs.
+- One gift per network per UTC day. A network is an IPv4 address itself, or the first 64 bits of an
+  IPv6 address, because one home or mobile line is handed a whole /64 and one machine can rotate
+  through it.
+- At most four judge gifts go out in any UTC hour, across every judge and network. The fifth claim in
+  an hour is answered judges_busy and leaves no mark, and a claim that hands nothing out gives its
+  place back. This bounds the rate, not the total: a script holding the judge code, several sign-ins
+  and several networks can still take four gifts an hour.
+- A relayer failure that may follow a broadcast (a timeout, a node naming another hash, a store error)
+  keeps the judge, the network and the gift marked and answers claim_pending, so a retry is
+  already_claimed, never a second gift.
 
 A design where the server keeps the key and signs the claim for one signed-in visitor's verified wallet
 never hands out a key at all, and meets this rule more strongly.
@@ -395,6 +410,9 @@ USDT address, the token list read from the vault, a fee ceiling and Ram's payee 
 - It builds the approve and createGift calldata itself and never forwards server-supplied calldata to
   contract-call.
 - The link it prints is never sent to a model provider or written to a log.
+- A Permit2 wrap payment pays only b402's pinned spender (B402_PERMIT2_SPENDER, C21). The agent signs
+  through Binance's wallet from the server's 402, and the server never offers another spender. The
+  agent does not yet check the spender itself.
 
 ### Operations
 C28. The longest allowed expiry is no longer than the time Moi commits to keep its domain and hosting

@@ -1,9 +1,19 @@
-import { createPublicClient, getAddress, http, parseAbi, type PublicClient } from "viem";
+import { createPublicClient, getAddress, http, parseAbi, type Address, type PublicClient } from "viem";
 import { bsc } from "viem/chains";
 
 export const CHAIN_ID = 56;
 export const USDT = "0x55d398326f99059fF775485246999027B3197955";
 export const NVDAB = "0x02fca66c1d1afb4e2a7884261eb00f63598a7436";
+
+/**
+ * The one spender a permit2-exact wrap payment may name: b402's settlement contract on BSC, which
+ * calls Permit2 itself, so Permit2 checks the signature against this address. Proved by gift 2's
+ * wrap payment, tx 0x8ec1e0666350aa500bbf2f7d36b1cd97bb8dfb2e9fd5ba328b75b899a36c38d6 (block
+ * 126396141): sent to this contract, it succeeded, and its Permit2 signature recovers to the payer
+ * only with this spender (scratchpad/wo12/spender.txt). A /supported answer naming any other
+ * spender is dropped by wrap.ts and refused by client/x402.ts.
+ */
+export const B402_PERMIT2_SPENDER: Address = getAddress("0x3038f7ac3b4D1a3fe886BdCB5cD01e9f6BDd8633");
 
 export const DEFAULT_BSC_RPC_URL = "https://bsc-dataseed.bnbchain.org";
 export const RPC_TIMEOUT_MS = 5_000;

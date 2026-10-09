@@ -13,6 +13,7 @@ export type StoreKey = string & { readonly [storeKeyBrand]: true };
 
 const NAMESPACE = "moi:v1";
 const DAY_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/;
+const HOUR_TEXT = /^(\d{4}-\d{2}-\d{2})T(\d{2})$/;
 
 function key(owner: Address, prefix: string, value?: string): StoreKey {
   const base = `${NAMESPACE}:${CHAIN_ID}:${owner}:${prefix}`;
@@ -87,13 +88,22 @@ function canonicalDay(dayUtc: string): string {
   return dayUtc;
 }
 
+// A UTC hour written YYYY-MM-DDTHH, the first 13 characters of toISOString, on a real date.
+function canonicalHour(hourUtc: string): string {
+  const match = typeof hourUtc === "string" ? HOUR_TEXT.exec(hourUtc) : null;
+  if (match === null || Number(match[2]) > 23) throw new RangeError("An hour key needs a UTC hour written YYYY-MM-DDTHH.");
+  canonicalDay(match[1] ?? "");
+  return hourUtc;
+}
+
 /**
  * Every key the server may use. Claim records and their locks belong to one vault on chain 56,
  * and spend counters, the send lock and the nonce counter belong to one relayer address, so a
  * redeployed vault or a rotated relayer starts clean instead of reading another deployment's
  * records. Every part is
  * parsed first: addresses through getAddress, gift ids through gift.ts parseGiftId (1 to
- * 2^256 - 1, decimal, no leading zeros), days as real YYYY-MM-DD dates. No part holds a colon, so
+ * 2^256 - 1, decimal, no leading zeros), days as real YYYY-MM-DD dates and hours as YYYY-MM-DDTHH
+ * on a real date. No part holds a colon, so
  * every key splits back into exactly one chain, address, prefix and value, and no input can reach
  * another namespace. Throws on any part that fails its parser.
  */
@@ -129,13 +139,18 @@ export const keys = {
   settlementUsed(payTo: Address, txHash: string, position: number): StoreKey {
     return key(canonicalAddress(payTo), "settlement", `${canonicalHex32(txHash)}-${canonicalLogPosition(position)}`);
   },
-  // Judge identities and IPs are stored as SHA-256 hashes: a Privy id contains colons and an IP
-  // has several spellings, so the caller hashes its one canonical form and only the hash is kept.
+  // Judge identities and networks are stored as 32-byte hashes: a Privy id contains colons and an
+  // address has several spellings, so the caller hashes its one canonical form and only the hash is kept.
   judgeUser(vault: Address, userHash: string): StoreKey {
     return key(canonicalAddress(vault), "judgeuser", canonicalHex32(userHash));
   },
-  judgeIpDay(vault: Address, ipHash: string, dayUtc: string): StoreKey {
-    return key(canonicalAddress(vault), "judgeip", `${canonicalHex32(ipHash)}-${canonicalDay(dayUtc)}`);
+  // WHY the "judgeip" prefix: an IPv4 network is its one address, so marks written before networks
+  // were grouped are the same keys and stay in force.
+  judgeNetworkDay(vault: Address, networkHash: string, dayUtc: string): StoreKey {
+    return key(canonicalAddress(vault), "judgeip", `${canonicalHex32(networkHash)}-${canonicalDay(dayUtc)}`);
+  },
+  judgeHour(vault: Address, hourUtc: string): StoreKey {
+    return key(canonicalAddress(vault), "judgehour", canonicalHour(hourUtc));
   },
   judgeGiftTaken(vault: Address, giftId: bigint): StoreKey {
     return key(canonicalAddress(vault), "judgegift", canonicalGiftId(giftId));

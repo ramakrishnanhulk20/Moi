@@ -322,6 +322,22 @@ describe("buildPayment", () => {
     expect(signs.count).toBe(0);
   });
 
+  it("refuses a permit2-exact request naming any spender but b402's pinned one, before reading the allowance or calling signTypedData", async () => {
+    const signs = { count: 0 };
+    const reads: unknown[][] = [];
+    const deps = { signer: localSigner(generatePrivateKey(), signs), publicClient: buyerClient(maxUint256, 56, reads) };
+    const usdt = requirement("USDT", "permit2-exact");
+    for (const spender of ["0x8c819E6De3df83E0e87bBE7651c5D4e83229b239", "0x70997970c51812dc3a010c7d01b50e0d17dc79c8", PERMIT2_ADDRESS]) {
+      const foreign = { ...usdt, extra: { ...usdt.extra, spenderAddress: spender } };
+      await expect(buildPayment(deps, foreign, RESOURCE)).rejects.toThrow(PaymentRequestError);
+    }
+    expect(signs.count).toBe(0);
+    expect(reads).toEqual([]);
+    const pinned = { ...usdt, extra: { ...usdt.extra, spenderAddress: SPENDER.toLowerCase() } };
+    expect((await buildPayment(deps, pinned, RESOURCE)).headerValue).not.toBe("");
+    expect(signs.count).toBe(1);
+  });
+
   it("refuses a wallet that signs with another key, a request it will not pay, a bad resource URL or a node on another chain", async () => {
     const other = privateKeyToAccount(generatePrivateKey());
     const lying: WalletSigner = { ...localSigner(), signTypedData: (d) => other.signTypedData(d) };

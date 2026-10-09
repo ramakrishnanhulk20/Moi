@@ -15,6 +15,7 @@ import {
   type PublicClient,
 } from "viem";
 import { describe, expect, it } from "vitest";
+import { B402_PERMIT2_SPENDER } from "../src/chain.js";
 import { createMemoryStore, keys, type KvStore } from "../src/store.js";
 import { Web3ApiError, type Web3Api } from "../src/web3api.js";
 import {
@@ -114,6 +115,20 @@ describe("buildPaymentRequirements", () => {
     const reqs = await buildPaymentRequirements({ api, origin: ORIGIN, payTo: PAY_TO, priceUsd: PRICE }, 7n);
     expect(reqs).toHaveLength(1);
     expect(reqs[0]?.extra).toEqual(permit2.extra);
+  });
+
+  it("drops a permit2-exact kind whose spender is not b402's pinned Permit2 spender, and keeps the pinned one however it is spelled", async () => {
+    expect(getAddress(SPENDER)).toBe(B402_PERMIT2_SPENDER);
+    const usdt = LIVE_SUPPORTED.kinds[6]!;
+    const usdc = LIVE_SUPPORTED.kinds[8]!;
+    const foreign = [UPTO_SPENDER, "0x90f79bf6eb2c4f870365e785982e1f101e93b906"].map((spenderAddress) => ({ ...usdt, extra: { ...usdt.extra, spenderAddress } }));
+    const lowercase = { ...usdc, extra: { ...usdc.extra, spenderAddress: SPENDER.toLowerCase() } };
+    const { api } = fakeApi({ kinds: [...foreign, lowercase, LIVE_SUPPORTED.kinds[0]] });
+    const reqs = await buildPaymentRequirements({ api, origin: ORIGIN, payTo: PAY_TO, priceUsd: PRICE }, 7n);
+    expect(reqs.map((r) => [r.asset, r.extra.assetTransferMethod])).toEqual([
+      [asset("USDC"), "permit2-exact"],
+      [asset("U"), "eip3009"],
+    ]);
   });
 
   it("reads /supported once per 10 minutes, shares one call between concurrent callers, and never caches a failure", async () => {

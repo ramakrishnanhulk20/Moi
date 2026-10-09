@@ -14,7 +14,7 @@ import {
 } from "viem";
 import { z } from "zod";
 import { parseAmount } from "../amounts.js";
-import { assertChain, CHAIN_ID } from "../chain.js";
+import { assertChain, B402_PERMIT2_SPENDER, CHAIN_ID } from "../chain.js";
 import { WRAP_ASSETS, WRAP_NETWORK, type PaymentRequirementsV2 } from "../wrap.js";
 
 /** The canonical Permit2 contract, the same address on every EVM chain (b402 Permit2 signing guide). */
@@ -257,8 +257,10 @@ function toBase64(text: string): string {
  * - permit2-exact: when the signer's ERC-20 allowance to Permit2 is below the amount, signs nothing
  *   and returns needsPermit2Approval for exactly that amount (C21) with an empty header; the caller
  *   sends permit2ApprovalTx, waits for it, and calls again. Otherwise PermitWitnessTransferFrom
- *   over Permit2's three-field domain: permitted {asset, amount}, spender extra.spenderAddress, a
+ *   over Permit2's three-field domain: permitted {asset, amount}, spender B402_PERMIT2_SPENDER, a
  *   random uint256 nonce, deadline now plus 600 s, witness {to: payTo, validAfter: now minus 5 s}.
+ *   A requirement whose extra.spenderAddress is any other address is refused before the allowance
+ *   is read, so no approval is offered for it.
  * "Now" is the latest block's timestamp from `publicClient`, after it reports chain 56, never the
  * device clock: a phone running fast would sign a payment that is not valid yet. Call
  * pickRequirement first: this function checks the requirement's shape, not who it pays. The
@@ -273,8 +275,12 @@ export async function buildPayment(
   resourceUrl: string,
 ): Promise<BuiltPayment> {
   const parsed = requirementSchema.safeParse(requirement);
-  if (!parsed.success) throw new PaymentRequestError("Moi's payment request is not one this page can pay, so nothing was paid.");
+  const unpayable = new PaymentRequestError("Moi's payment request is not one this page can pay, so nothing was paid.");
+  if (!parsed.success) throw unpayable;
   const req = parsed.data;
+  // WHY (C21, C27): the spender is who Permit2 lets pull this wallet's tokens, and the 402 is server
+  // text. Only b402's own contract is signed for, checked before any approval is offered.
+  if (req.extra.assetTransferMethod === "permit2-exact" && getAddress(req.extra.spenderAddress) !== B402_PERMIT2_SPENDER) throw unpayable;
   const url = checkResourceUrl(resourceUrl);
   let from: Address;
   try {
@@ -313,7 +319,7 @@ export async function buildPayment(
       authorization: { from, to: payTo, value: req.amount, validAfter: validAfter.toString(), validBefore: validBefore.toString(), nonce },
     };
   } else {
-    const spender = getAddress(req.extra.spenderAddress);
+    const spender = B402_PERMIT2_SPENDER;
     const allowance = await deps.publicClient.readContract({ address: asset, abi: erc20Abi, functionName: "allowance", args: [from, PERMIT2_ADDRESS] });
     if (allowance < amount) return { headerValue: "", needsPermit2Approval: { token: asset, spender: PERMIT2_ADDRESS, amount } };
     const nonce = BigInt(randomBytes32());

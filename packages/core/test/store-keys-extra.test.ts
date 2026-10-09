@@ -41,11 +41,11 @@ describe("judge gift keys", () => {
   const h = `0x${"cd".repeat(32)}`;
   it("builds canonical judge keys scoped to the vault", () => {
     expect(keys.judgeUser(vault, h)).toBe(`moi:v1:56:${getAddress(vault)}:judgeuser:${h}`);
-    expect(keys.judgeIpDay(vault, h, "2026-10-08")).toBe(`moi:v1:56:${getAddress(vault)}:judgeip:${h}-2026-10-08`);
+    expect(keys.judgeNetworkDay(vault, h, "2026-10-08")).toBe(`moi:v1:56:${getAddress(vault)}:judgeip:${h}-2026-10-08`);
     expect(keys.judgeGiftTaken(vault, 12n)).toBe(`moi:v1:56:${getAddress(vault)}:judgegift:12`);
   });
   it("refuses unhashed identities and bad days", () => {
     expect(() => keys.judgeUser(vault, "did:privy:abc")).toThrow(RangeError);
-    expect(() => keys.judgeIpDay(vault, h, "2026-02-30")).toThrow(RangeError);
+    expect(() => keys.judgeNetworkDay(vault, h, "2026-02-30")).toThrow(RangeError);
   });
 });
