@@ -181,7 +181,7 @@ flowchart TB
 ### a. Claim a real share
 
 1. Open https://moi-gift.vercel.app and scroll to the section marked FOR JUDGES. The top bar also has a "For judges" link.
-2. Press "Sign in to claim" and sign in with Google or email. If you use email, Privy sends a code to your inbox and you type it in. Moi makes a wallet for you, and the button now reads "Claim my share".
+2. Press "Sign in with Google or email" (step 1) and sign in. If you use email, Privy sends a code to your inbox and you type it in. Moi makes a wallet for you, and step 1 then shows "Signed in as" with your email.
 3. Type the judge code from the submission form into the box.
 4. Tick the declaration that you are not a US person and not in the US or a restricted region.
 5. Press "Claim my share". Your wallet signs a short message that proves the wallet is yours, then Moi sends the share and pays the fee. The page shows "It's yours." and a link to the transaction on BscScan.
