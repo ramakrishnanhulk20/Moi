@@ -93,6 +93,94 @@
   color: var(--bg);
 }
 
+/* Phone menu: a text button in the bar and a sheet that drops from under it */
+.site-menu-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 400 12px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  cursor: pointer;
+}
+
+.site-menu-label,
+.site-sheet-label {
+  position: relative;
+  padding-block: 6px;
+}
+
+.site-menu-label::after,
+.site-sheet-label::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 250ms ease-out;
+}
+
+.site-menu-button:hover .site-menu-label::after,
+.site-sheet-link:hover .site-sheet-label::after {
+  transform: scaleX(1);
+}
+
+.site-nav .site-menu-button:focus-visible,
+.site-nav .site-sheet-link:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.site-sheet {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-raised);
+  animation: site-sheet-in 200ms ease-out both;
+}
+
+.site-sheet[hidden] {
+  display: none;
+}
+
+.site-sheet-link {
+  display: flex;
+  align-items: center;
+  height: 52px;
+  padding-inline: clamp(16px, 4vw, 56px);
+  color: var(--ink);
+  font: 400 18px/1.2 var(--font-body);
+  transition: background-color 150ms;
+}
+
+.site-sheet-link + .site-sheet-link {
+  border-top: 1px solid var(--line);
+}
+
+.site-sheet-link:hover {
+  background: rgba(246, 239, 230, 0.04);
+}
+
+@keyframes site-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (min-width: 768px) {
   .site-nav {
     height: 72px;
@@ -100,5 +188,22 @@
 
   .site-links {
     display: flex;
+  }
+
+  .site-menu-button,
+  .site-sheet {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-sheet {
+    animation: none;
+  }
+
+  .site-sheet-link,
+  .site-menu-label::after,
+  .site-sheet-label::after {
+    transition: none;
   }
 }

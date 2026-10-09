@@ -37,7 +37,8 @@ export function Mermaid({ chart }: { chart: string }) {
         });
         const { svg } = await mermaid.render(id, chart);
         const width = Number(/viewBox="[-\d.]+ [-\d.]+ ([\d.]+) /.exec(svg)?.[1] ?? 0);
-        if (current) setDrawn({ svg, minWidth: Math.min(Math.max(Math.round(width), 480), 1200) });
+        // On a narrow screen the drawing may shrink to 1 / 1.6 of its own width and no further, so its text stays readable.
+        if (current) setDrawn({ svg, minWidth: Math.round(width / 1.6) });
       } catch {
         // A failed render can leave a stray element on the page behind.
         document.getElementById(`d${id}`)?.remove();

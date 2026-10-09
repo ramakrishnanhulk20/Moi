@@ -559,7 +559,7 @@ function JudgesStage() {
               locked={claiming}
             />
             <button type="submit" className="judges-primary" disabled={signIn.kind === "signedOut" ? false : !canClaim}>
-              {signIn.kind === "signedOut" ? "Sign in to claim" : "Claim my share"}
+              Claim my share
             </button>
             {phase.kind === "idle" && missing !== null ? <p className="judges-hint">{missing}</p> : null}
             {phase.kind === "claiming" ? <ClaimingBlock /> : null}

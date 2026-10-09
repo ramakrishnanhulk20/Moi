@@ -540,7 +540,9 @@
 }
 
 .judges-primary:disabled {
-  opacity: 0.4;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--ink-muted);
   cursor: not-allowed;
 }
 

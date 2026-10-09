@@ -97,7 +97,7 @@ export function ClaimView({ view }: { view: View }) {
   return (
     <div className="claim-page" data-scene={scene === null ? "none" : "shown"}>
       <header className="claim-bar">
-        <Link className="claim-brand" href="/" prefetch={false}>
+        <Link className="claim-brand" href="/" prefetch={false} aria-label="Moi, home">
           <VMark width={12} />
           <span className="claim-wordmark">Moi</span>
         </Link>

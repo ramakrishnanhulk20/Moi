@@ -186,7 +186,13 @@
   background: var(--gold-deep);
 }
 
-.send-primary:disabled,
+.send-primary:disabled {
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--ink-muted);
+  cursor: not-allowed;
+}
+
 .send-secondary:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -227,6 +233,36 @@
 
 .send-pending-text {
   color: var(--pending);
+}
+
+/* The "Connect your wallet first." hint is a button; it looks like the hint and draws a gold underline on hover */
+.send-hint-button {
+  position: relative;
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.send-hint-button::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 250ms ease-out;
+}
+
+.send-hint-button:hover::after {
+  transform: scaleX(1);
 }
 
 .send-warning {
@@ -890,6 +926,7 @@
   }
 
   .send-link::after,
+  .send-hint-button::after,
   .send-primary,
   .send-secondary,
   .send-tile,

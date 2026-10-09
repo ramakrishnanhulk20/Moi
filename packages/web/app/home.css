@@ -349,6 +349,15 @@
     --final-w: 0.92;
   }
 
+  /* Three lines, one part each, with no dots left hanging at a line's end */
+  .hero-meta-part {
+    display: block;
+  }
+
+  .hero-meta-gap {
+    display: none;
+  }
+
   .hero-stage {
     height: 440px;
   }

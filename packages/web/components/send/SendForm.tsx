@@ -19,6 +19,8 @@ export type Days = 7 | 30 | 90;
 export type StorageState = "checking" | "ok" | "blocked";
 
 const STORAGE_NOTICE = "This browser is not saving site data, so Moi cannot keep your gift link safe. Allow site data for this site or use another browser.";
+const CONNECT_FIRST = "Connect your wallet first.";
+const CONNECT_BUTTON_ID = "send-connect-button";
 
 /**
  * The line under a disabled send button: the first thing missing, in the order a sender would fix
@@ -28,7 +30,7 @@ const STORAGE_NOTICE = "This browser is not saving site data, so Moi cannot keep
 export function sendHintFor(state: { running: boolean; storage: StorageState; connected: boolean; stock: Stock | null; amountOk: boolean }): string | null {
   if (state.running) return null;
   if (state.storage === "blocked") return STORAGE_NOTICE;
-  if (!state.connected) return "Connect your wallet first.";
+  if (!state.connected) return CONNECT_FIRST;
   if (state.stock === null) return "Pick a stock.";
   if (!state.amountOk) return `Choose an amount from $${MIN_GIFT_USD} to $${MAX_GIFT_USD}.`;
   if (!isTradable(state.stock)) return "That stock's market is closed right now.";
@@ -39,6 +41,14 @@ const PRESETS: readonly AmountChoice[] = ["1", "5", "10", "25"];
 const LIFETIMES: readonly Days[] = [7, 30, 90];
 // 0.0005 BNB in wei: under this a wallet cannot pay for the four or five transactions of a send.
 const LOW_BNB = 500_000_000_000_000n;
+
+/** Brings the Connect button to the middle of the screen and puts the keyboard on it. */
+function showConnectButton() {
+  const connect = document.getElementById(CONNECT_BUTTON_ID);
+  if (connect === null) return;
+  connect.scrollIntoView({ block: "center" });
+  connect.focus({ preventScroll: true });
+}
 
 export function ConnectRow({ wallet }: { wallet: WalletView }) {
   if (wallet.kind === "connected") {
@@ -67,7 +77,13 @@ export function ConnectRow({ wallet }: { wallet: WalletView }) {
   }
   return (
     <div className="send-connect">
-      <button type="button" className="send-primary send-primary-tall" disabled={wallet.kind !== "disconnected"} onClick={wallet.kind === "disconnected" ? wallet.onConnect : undefined}>
+      <button
+        type="button"
+        id={CONNECT_BUTTON_ID}
+        className="send-primary send-primary-tall"
+        disabled={wallet.kind !== "disconnected"}
+        onClick={wallet.kind === "disconnected" ? wallet.onConnect : undefined}
+      >
         Connect your wallet
       </button>
       <p className="send-hint">Binance Wallet or MetaMask, on BNB Chain. You pay in USDT.</p>
@@ -199,7 +215,13 @@ export function SendFields(props: FormProps) {
       </button>
       {props.hint === null ? null : (
         <p className="send-hint" role="status">
-          {props.hint}
+          {props.hint === CONNECT_FIRST ? (
+            <button type="button" className="send-hint-button" onClick={showConnectButton}>
+              {props.hint}
+            </button>
+          ) : (
+            props.hint
+          )}
         </p>
       )}
     </fieldset>
