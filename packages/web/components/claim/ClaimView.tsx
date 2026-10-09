@@ -7,7 +7,7 @@ import type { Address, Hex } from "viem";
 import type { GiftView } from "@moi/core/src/client/claim.js";
 import { Grain } from "@/components/hero/Grain";
 import { VMark } from "@/components/hero/VMark";
-import { displayName } from "@/lib/stocks";
+import { displayName, formatShares } from "@/lib/stocks";
 import { ClaimStage, type SceneState } from "./ClaimStage";
 
 // The root layout loads Fraunces upright only, so the italic cut is loaded here, as the hero does.
@@ -90,7 +90,7 @@ export function ClaimView({ view }: { view: View }) {
   const gift = "gift" in view ? view.gift : null;
   const worth = "worth" in view ? view.worth : null;
   const certificate = useMemo(
-    () => (gift === null ? undefined : { figure: gift.shares, holding: `SHARES OF ${displayName(gift.name).toUpperCase()}`, worth }),
+    () => (gift === null ? undefined : { figure: formatShares(gift.shares), holding: `SHARES OF ${displayName(gift.name).toUpperCase()}`, worth }),
     [gift, worth],
   );
 
@@ -193,7 +193,7 @@ function ReadyPanel({ gift, worth, signIn }: { gift: GiftView; worth: string | n
         <br />
         <em className="claim-italic" style={{ fontFamily: displayItalic.style.fontFamily }}>{`a piece of ${displayName(gift.name)}.`}</em>
       </h1>
-      <p className="claim-count">{`${gift.shares} SHARES${worth === null ? "" : ` · ${worth}`}`}</p>
+      <p className="claim-count">{`${formatShares(gift.shares)} SHARES${worth === null ? "" : ` · ${worth}`}`}</p>
       <SignIn signIn={signIn} />
     </>
   );
@@ -295,7 +295,7 @@ function OpenedPanel({ view }: { view: Extract<View, { screen: "opened" }> }) {
   return (
     <>
       <h1 className="claim-h claim-h-big">{"It's yours."}</h1>
-      <p className="claim-body claim-body-ink">{`${gift.shares} shares of ${displayName(gift.name)} are in your wallet ${shortAddress(address)} on BNB Chain.`}</p>
+      <p className="claim-body claim-body-ink">{`${formatShares(gift.shares)} shares of ${displayName(gift.name)} are in your wallet ${shortAddress(address)} on BNB Chain.`}</p>
       {note !== null && note !== "" ? (
         <blockquote className="claim-note">
           <p className="claim-note-text" style={{ fontFamily: displayItalic.style.fontFamily }}>

@@ -121,6 +121,16 @@ export function useStocks(): StocksState {
   );
 }
 
+/**
+ * A share count as people read it: four decimals, so "0.004286236788621920957187943902261" shows as
+ * "0.0043". The chain keeps every digit; this is display only.
+ */
+export function formatShares(text: string): string {
+  const value = Number(text);
+  if (!Number.isFinite(value) || value <= 0) return text;
+  return value < 0.0001 ? value.toPrecision(2) : value.toFixed(4);
+}
+
 /** The on-chain name with legal suffixes removed: "Tesla, Inc." becomes "Tesla". */
 export function displayName(name: string): string {
   let text = name.trim();

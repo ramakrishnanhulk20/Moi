@@ -15,7 +15,7 @@ import { useMediaQuery } from "@/components/hero/useMediaQuery";
 import { V_MARK_PATH } from "@/components/hero/VMark";
 import { MoiPrivy, useSignInAvailable } from "@/components/privy/MoiPrivy";
 import { publicClient, VAULT } from "@/lib/chain";
-import { displayName } from "@/lib/stocks";
+import { displayName, formatShares } from "@/lib/stocks";
 import "./judges.css";
 
 // The root layout loads Fraunces upright only, so the italic cut is loaded here, as the hero does.
@@ -298,6 +298,7 @@ const GIFT_RETRY_MS = 2_000;
 const SHARES_TEXT = /^[0-9]+(\.[0-9]+)?$/;
 const MAX_NAME_CHARS = 64;
 const MAX_SHARES_CHARS = 160;
+const RETURN_KEY = "moi:judges-return";
 
 const PREVIEW_NAMES = ["ready", "claiming", "done", "error", "retry"] as const;
 type PreviewName = (typeof PREVIEW_NAMES)[number];
@@ -337,7 +338,7 @@ async function readArrival(giftId: bigint): Promise<{ shares: string; name: stri
       const { name, shares } = reply.body as Record<string, unknown>;
       if (typeof name !== "string" || name === "" || name.length > MAX_NAME_CHARS) continue;
       if (typeof shares !== "string" || shares.length > MAX_SHARES_CHARS || !SHARES_TEXT.test(shares)) continue;
-      return { shares, name: displayName(name) };
+      return { shares: formatShares(shares), name: displayName(name) };
     } catch {
       // The claim already went through, so a failed read only means trying once more.
     }
@@ -433,6 +434,29 @@ function JudgesStage() {
   }
   const claiming = phase.kind === "claiming";
   const canClaim = signIn.kind === "signedIn" && code.trim() !== "" && declared && !claiming;
+  const missing =
+    signIn.kind === "signedOut" ? "Sign in first (step 1)." : code.trim() === "" ? "Enter the judge code (step 2)." : !declared ? "Tick the box (step 3)." : null;
+
+  // Google sign-in leaves the page and comes back to its top, so the judge is brought back here.
+  const startSignIn = () => {
+    try {
+      window.sessionStorage.setItem(RETURN_KEY, "1");
+    } catch {
+      // Without storage the judge only has to scroll back down.
+    }
+    login();
+  };
+  useEffect(() => {
+    if (!authenticated) return;
+    let back = false;
+    try {
+      back = window.sessionStorage.getItem(RETURN_KEY) === "1";
+      window.sessionStorage.removeItem(RETURN_KEY);
+    } catch {
+      back = false;
+    }
+    if (back) window.setTimeout(() => document.getElementById("judges")?.scrollIntoView({ block: "start" }), 300);
+  }, [authenticated]);
 
   const claim = async () => {
     if (busy.current) return;
@@ -520,12 +544,13 @@ function JudgesStage() {
             noValidate
             onSubmit={(event) => {
               event.preventDefault();
-              if (canClaim) void claim();
+              if (signIn.kind === "signedOut") startSignIn();
+              else if (canClaim) void claim();
             }}
           >
             <Steps
               signIn={signIn}
-              onSignIn={() => login()}
+              onSignIn={startSignIn}
               onSignOut={() => void logout()}
               code={code}
               onCode={setCode}
@@ -533,9 +558,10 @@ function JudgesStage() {
               onDeclared={setDeclared}
               locked={claiming}
             />
-            <button type="submit" className="judges-primary" disabled={!canClaim}>
-              Claim my share
+            <button type="submit" className="judges-primary" disabled={signIn.kind === "signedOut" ? false : !canClaim}>
+              {signIn.kind === "signedOut" ? "Sign in to claim" : "Claim my share"}
             </button>
+            {phase.kind === "idle" && missing !== null ? <p className="judges-hint">{missing}</p> : null}
             {phase.kind === "claiming" ? <ClaimingBlock /> : null}
             {phase.kind === "error" ? <ErrorBlock error={phase.error} onRetry={() => void claim()} /> : null}
           </form>
