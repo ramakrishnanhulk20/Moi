@@ -1,7 +1,7 @@
 "use client";
 
 import { PrivyProvider, type PrivyClientConfig } from "@privy-io/react-auth";
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { Component, createContext, useContext, useMemo, type ReactNode } from "react";
 import { bsc } from "@/lib/chain";
 
 // Privy throws on any app id that is not exactly this long, and the throw would take the whole page down.
@@ -31,6 +31,22 @@ const config = (nonce: string | undefined): PrivyClientConfig => ({
 });
 
 /**
+ * A browser that blocks site data makes Privy throw as it starts (localStorage raises SecurityError),
+ * which would take the whole page down. The page then carries on without sign-in instead, and says so.
+ */
+class PrivyFailSafe extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
+  override state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  override render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+/**
  * Privy's sign-in, mounted only around the parts of the site that need it. It is not in the root
  * layout on purpose: the claim page must take the claim key out of the address bar before this
  * loads, because Privy sends the page address to its server when Google sign-in starts (C12).
@@ -43,10 +59,12 @@ export function MoiPrivy({ nonce, children }: { nonce: string | undefined; child
     return <SignInUnavailable.Provider value={true}>{children}</SignInUnavailable.Provider>;
   }
   return (
-    <SignInUnavailable.Provider value={false}>
-      <PrivyProvider appId={appId} config={settings}>
-        {children}
-      </PrivyProvider>
-    </SignInUnavailable.Provider>
+    <PrivyFailSafe fallback={<SignInUnavailable.Provider value={true}>{children}</SignInUnavailable.Provider>}>
+      <SignInUnavailable.Provider value={false}>
+        <PrivyProvider appId={appId} config={settings}>
+          {children}
+        </PrivyProvider>
+      </SignInUnavailable.Provider>
+    </PrivyFailSafe>
   );
 }

@@ -9,7 +9,11 @@ import type { PendingGift } from "@moi/core/src/client/send.js";
 /** A gift key saved before its createGift was sent. `declined` is set when the wallet refused and the record could not be removed. */
 export type StoredPending = PendingGift & { declined: boolean };
 
-export type StoredLink = { giftId: string; link: string; symbol: string; createdAt: number };
+/** The last state a gift reaches. Once a gift is in one of these, nothing about it can change, so its link is not kept. */
+export type FinalState = "Claimed" | "Refunded";
+
+/** A sent gift. `link` is null once the gift is Claimed or Refunded: the key has done its job and is erased. */
+export type StoredLink = { giftId: string; link: string | null; symbol: string; createdAt: number; final?: FinalState };
 
 const PENDING_PREFIX = "moi:pending:";
 const LINKS_PREFIX = "moi:links:";
@@ -37,6 +41,8 @@ function area(): Storage | null {
 
 /** True when this browser lets the page write, read back and delete a value. */
 export function storageWorks(): boolean {
+  // The layout's guard swapped in a memory-only store, which loses everything on reload.
+  if ((globalThis as { __moiStorageBlocked?: boolean }).__moiStorageBlocked === true) return false;
   try {
     const storage = area();
     if (storage === null) return false;
@@ -106,8 +112,13 @@ function asLink(value: unknown): StoredLink | null {
   if (typeof value !== "object" || value === null) return null;
   const v = value as Record<string, unknown>;
   if (typeof v.giftId !== "string" || !/^[1-9][0-9]{0,9}$/.test(v.giftId)) return null;
-  if (typeof v.link !== "string" || typeof v.symbol !== "string") return null;
+  if (typeof v.symbol !== "string") return null;
   if (typeof v.createdAt !== "number" || !Number.isFinite(v.createdAt)) return null;
+  if (v.final === "Claimed" || v.final === "Refunded") {
+    // A link left beside a final state is ignored, so it never reaches the screen.
+    return { giftId: v.giftId, link: null, symbol: v.symbol, createdAt: v.createdAt, final: v.final };
+  }
+  if (typeof v.link !== "string") return null;
   return { giftId: v.giftId, link: v.link, symbol: v.symbol, createdAt: v.createdAt };
 }
 
@@ -166,10 +177,37 @@ export function listLinks(sender: string): StoredLink[] {
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 
-/** Saves a gift link. A link already saved for the same gift is replaced. Returns false when the browser would not keep it. */
+/**
+ * Saves a gift link. A link already saved for the same gift is replaced, except when that gift is
+ * already final: the key is not put back on the device then. Returns false when the browser would
+ * not keep it.
+ */
 export function addLink(sender: string, link: StoredLink): boolean {
   const list = readRaw(linksKey(sender));
   if (list === null) return false;
+  if (list.some((entry) => asLink(entry)?.giftId === link.giftId && asLink(entry)?.final !== undefined)) return true;
   const rest = list.filter((entry) => asLink(entry)?.giftId !== link.giftId);
   return writeRaw(linksKey(sender), [...rest, link]);
+}
+
+/**
+ * Rewrites the record of each gift in `finals` without its link, keeping the gift's id, symbol and
+ * creation time and adding the final state, so no key stays on the device for a gift that can no
+ * longer be opened. Records for other gifts, and entries this page does not recognise, are left as
+ * they are. Returns true when at least one record changed and was saved.
+ */
+export function sealFinished(sender: string, finals: Readonly<Record<string, FinalState>>): boolean {
+  const list = readRaw(linksKey(sender));
+  if (list === null) return false;
+  let changed = false;
+  const next = list.map((entry) => {
+    const link = asLink(entry);
+    const final = link === null ? undefined : finals[link.giftId];
+    if (link === null || final === undefined) return entry;
+    // Already final and already without a link: nothing to rewrite.
+    if (link.final !== undefined && !("link" in (entry as object))) return entry;
+    changed = true;
+    return { giftId: link.giftId, symbol: link.symbol, createdAt: link.createdAt, final };
+  });
+  return changed && writeRaw(linksKey(sender), next);
 }

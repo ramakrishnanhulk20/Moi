@@ -124,7 +124,8 @@ export function AgentRun() {
         </h2>
         <p className="agent-body">
           Moi&apos;s agent runs on the Binance Agentic Wallet. You set the spending limits in the Binance app. Inside them, the agent buys the
-          share, locks the gift and pays the 5-cent wrap with b402. Gift 2 on mainnet was made this way.
+          share or gifts one it already holds, locks the gift and pays the 5-cent wrap with b402. Gift 2 on mainnet was made this way,
+          from a share the agent already held.
         </p>
         <div className="agent-proofs">
           <ProofLine words="gift 2 wrapped with b402" hash={PROOF.gift2Wrapped} />

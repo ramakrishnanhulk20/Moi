@@ -8,9 +8,21 @@ export type DriveIO = {
   keepLink: (giftId: bigint, link: string) => boolean;
   dropPending: (claimKey: Hex) => void;
   dropDeclined: (claimKey: Hex) => void;
+  /** True when the vault has already seen this claim key. Rejects when the vault cannot be read. */
+  claimKeyUsed: (claimKey: Hex) => Promise<boolean>;
 };
 
 export type DriveResult = { ok: true } | { ok: false; error: unknown };
+
+async function dropIfUnused(claimKey: Hex, io: DriveIO): Promise<void> {
+  let used: boolean;
+  try {
+    used = await io.claimKeyUsed(claimKey);
+  } catch {
+    return;
+  }
+  if (!used) io.dropDeclined(claimKey);
+}
 
 /**
  * Runs sendGift's steps in the order the claim key needs:
@@ -19,8 +31,9 @@ export type DriveResult = { ok: true } | { ok: false; error: unknown };
  *   run stops before createGift;
  * - link-ready: the link is saved first, then the pending record is removed (and kept if the link
  *   could not be saved);
- * - a wallet refusal of createGift in this same run removes the pending record at once, because the
- *   transaction was never sent.
+ * - a wallet refusal of createGift in this same run removes the pending record, but only after the
+ *   vault says the key was never used: some wallets answer "refused" for a transaction they did
+ *   send. If the key was used, or the vault cannot be read, the record stays for recovery.
  * It never reads, logs or sends the claim key beyond handing it to `io`.
  */
 export async function driveSend(gen: AsyncGenerator<SendStep, void, void>, io: DriveIO): Promise<DriveResult> {
@@ -55,7 +68,7 @@ export async function driveSend(gen: AsyncGenerator<SendStep, void, void>, io: D
     }
   } catch (error) {
     if (outstanding !== null && last === "create" && error instanceof SendGiftError && error.code === "declined") {
-      io.dropDeclined(outstanding.claimKey);
+      await dropIfUnused(outstanding.claimKey, io);
     }
     return { ok: false, error };
   }

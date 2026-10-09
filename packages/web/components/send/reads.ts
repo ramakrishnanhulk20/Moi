@@ -1,8 +1,10 @@
 import { callMoi } from "@moi/core/src/client/send.js";
 import { giftVaultAbi } from "@moi/core/src/generated/giftVaultAbi.js";
 import { encodeFunctionData, erc20Abi, type Address, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { publicClient, VAULT } from "@/lib/chain";
 import type { WalletSigner } from "@moi/core/src/client/x402.js";
+import { listLinks, sealFinished, type FinalState } from "./storage";
 
 export const USDT: Address = "0x55d398326f99059fF775485246999027B3197955";
 
@@ -16,6 +18,12 @@ export async function readBalances(address: Address): Promise<Balances> {
     publicClient.getBalance({ address }),
   ]);
   return { usdt, usdtDecimals, bnb };
+}
+
+/** True when the vault has already seen this claim key, so a gift was made with it. Rejects when the vault cannot be read. */
+export async function readClaimKeyUsed(claimKey: Hex): Promise<boolean> {
+  const keyAddress = privateKeyToAccount(claimKey).address;
+  return publicClient.readContract({ address: VAULT, abi: giftVaultAbi, functionName: "claimKeyUsed", args: [keyAddress] });
 }
 
 /** The latest block's time in Unix seconds. */
@@ -39,6 +47,36 @@ export async function readGiftStatus(giftId: string): Promise<GiftStatus | null>
   } catch {
     return null;
   }
+}
+
+// The vault's State enum: 0 none, 1 Open, 2 Claimed, 3 Refunded.
+const STATE_CLAIMED = 2;
+const STATE_REFUNDED = 3;
+
+/**
+ * Reads, in one multicall, the state on the vault of every gift this browser still holds a link for,
+ * and rewrites the record of each gift that is Claimed or Refunded without its link, so no claim key
+ * stays on the device for a gift that can no longer be opened. A gift whose read failed, or whose
+ * sender on the vault is not `owner`, is left alone. Rejects when the vault cannot be read, and
+ * then nothing is changed. Resolves true when at least one record was rewritten.
+ */
+export async function eraseFinishedKeys(owner: Address, client: Pick<typeof publicClient, "multicall"> = publicClient): Promise<boolean> {
+  const ids = listLinks(owner)
+    .filter((entry) => entry.final === undefined)
+    .map((entry) => entry.giftId);
+  if (ids.length === 0) return false;
+  const gifts = await client.multicall({
+    contracts: ids.map((id) => ({ address: VAULT, abi: giftVaultAbi, functionName: "getGift", args: [BigInt(id)] }) as const),
+    allowFailure: true,
+  });
+  const finals: Record<string, FinalState> = {};
+  gifts.forEach((reply, index) => {
+    const id = ids[index];
+    if (id === undefined || reply.status !== "success" || reply.result.sender.toLowerCase() !== owner.toLowerCase()) return;
+    if (reply.result.state === STATE_CLAIMED) finals[id] = "Claimed";
+    else if (reply.result.state === STATE_REFUNDED) finals[id] = "Refunded";
+  });
+  return sealFinished(owner, finals);
 }
 
 /** True when the wallet's refusal sits anywhere in the error's chain of causes. */

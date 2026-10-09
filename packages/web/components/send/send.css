@@ -831,6 +831,24 @@
   font: 400 14px/1.5 var(--font-body);
 }
 
+/* The state chip of a gift that was opened or taken back: the same look as the home page's latest gifts */
+.send-gift-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font: 400 11px/1.4 var(--font-mono);
+  letter-spacing: 0.14em;
+}
+
+.send-gift-chip-opened {
+  color: var(--ok);
+}
+
+.send-gift-chip-taken-back {
+  color: var(--ink-muted);
+}
+
 .send-gift-actions {
   display: flex;
   gap: 20px;

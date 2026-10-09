@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { Grain } from "@/components/hero/Grain";
 import { useMediaQuery } from "@/components/hero/useMediaQuery";
 import { publicClient, VAULT } from "@/lib/chain";
-import { addressCodeUrl, shortHex } from "@/lib/proof";
+import { addressUrl, shortHex, sourceUrl } from "@/lib/proof";
 import "./sections.css";
 
 // The order of GiftVault.State in GiftVault.sol: None, Open, Claimed, Refunded.
@@ -275,10 +275,13 @@ export function LiveNumbers() {
         </div>
         <p className="live-source">
           Read live from the Moi vault{" "}
-          <a className="draw-link" href={addressCodeUrl(VAULT)} target="_blank" rel="noopener noreferrer">
+          <a className="draw-link" href={addressUrl(VAULT)} target="_blank" rel="noopener noreferrer">
             {shortHex(VAULT)}
           </a>{" "}
-          · source verified
+          ·{" "}
+          <a className="draw-link" href={sourceUrl(VAULT)} target="_blank" rel="noopener noreferrer">
+            source verified on Sourcify
+          </a>
         </p>
       </div>
       <Grain />

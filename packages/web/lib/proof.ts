@@ -17,6 +17,11 @@ export function txUrl(hash: string): string {
   return `https://bscscan.com/tx/${hash}`;
 }
 
-export function addressCodeUrl(address: string): string {
-  return `https://bscscan.com/address/${address}#code`;
+export function addressUrl(address: string): string {
+  return `https://bscscan.com/address/${address}`;
+}
+
+/** The vault's verified source. Sourcify holds an exact match; BscScan does not show a verification. */
+export function sourceUrl(address: string): string {
+  return `https://repo.sourcify.dev/56/${address}`;
 }

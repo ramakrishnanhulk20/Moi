@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { readChainTime, readGiftStatus, type GiftStatus } from "./reads";
-import type { StoredLink } from "./storage";
+import type { FinalState, StoredLink } from "./storage";
 
 /** Gifts shown at most; the vault's newest first. Each one costs a request to Moi's server. */
 const MAX_ROWS = 20;
@@ -14,15 +14,21 @@ export type GiftsFixture = { statuses: Record<string, GiftStatus>; chainTime: nu
 
 // Without the chain's time an Open gift cannot be called expired, so it is shown as waiting.
 function labelOf(status: GiftStatus, chainTime: number | null): string {
-  if (status.state === "Claimed") return "Opened";
-  if (status.state === "Refunded") return "Taken back";
   return chainTime !== null && status.expiry <= chainTime ? "Expired" : "Waiting to be opened";
 }
+
+// The same chips as the home page's latest gifts. A gift in one of these states has no link to copy.
+const CHIPS: Readonly<Record<FinalState, { text: string; tone: string }>> = {
+  Claimed: { text: "OPENED", tone: "opened" },
+  Refunded: { text: "TAKEN BACK", tone: "taken-back" },
+};
 
 /**
  * The sender's gifts, newest first, each with what the vault says about it now. A gift that is still
  * Open but past its expiry can be taken back: the sender's wallet sends the vault's refund call.
- * `onRefund` resolves with null on success, or with the sentence to show when it did not work.
+ * A gift that is opened or taken back shows a state chip and no copy button: its link is erased
+ * from this browser. `onRefund` resolves with null on success, or with the sentence to show when it
+ * did not work.
  */
 export function MyGifts({
   entries,
@@ -41,7 +47,11 @@ export function MyGifts({
   const [copied, setCopied] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
   const shown = entries.slice(0, MAX_ROWS);
-  const ids = shown.map((entry) => entry.giftId).join(",");
+  // A finished gift needs no look-up, unless it was saved without a symbol and the server can supply one.
+  const ids = shown
+    .filter((entry) => entry.final === undefined || entry.symbol === "")
+    .map((entry) => entry.giftId)
+    .join(",");
 
   useEffect(() => {
     if (fixture !== null || ids === "") return;
@@ -65,6 +75,7 @@ export function MyGifts({
   );
 
   const copy = async (entry: StoredLink) => {
+    if (entry.link === null) return;
     try {
       await navigator.clipboard.writeText(entry.link);
       setCopied(entry.giftId);
@@ -104,18 +115,29 @@ export function MyGifts({
           const status = statusMap[entry.giftId];
           const known = status !== undefined && status !== "failed" ? status : null;
           const refund = refunds[entry.giftId];
+          const final: FinalState | undefined = entry.final ?? (known?.state === "Claimed" ? "Claimed" : known?.state === "Refunded" ? "Refunded" : undefined);
           const canTake = known !== null && known.state === "Open" && time !== null && known.expiry <= time && canRefund && (refund === undefined || refund.phase === "error");
           return (
             <li className="send-gift" key={entry.giftId}>
               <span className="send-gift-id">#{entry.giftId}</span>
               <span className="send-gift-symbol">{known?.symbol || entry.symbol}</span>
               <span className="send-gift-state">
-                {status === undefined ? "Checking" : known === null ? "Could not check" : labelOf(known, time)}
+                {final !== undefined ? (
+                  <span className={`send-gift-chip send-gift-chip-${CHIPS[final].tone}`}>{CHIPS[final].text}</span>
+                ) : status === undefined ? (
+                  "Checking"
+                ) : known === null ? (
+                  "Could not check"
+                ) : (
+                  labelOf(known, time)
+                )}
               </span>
               <span className="send-gift-actions">
-                <button type="button" className="send-link send-link-small" onClick={() => void copy(entry)}>
-                  {copied === entry.giftId ? "Copied" : "Copy link"}
-                </button>
+                {final === undefined && entry.link !== null ? (
+                  <button type="button" className="send-link send-link-small" onClick={() => void copy(entry)}>
+                    {copied === entry.giftId ? "Copied" : "Copy link"}
+                  </button>
+                ) : null}
                 {canTake ? (
                   <button type="button" className="send-link send-link-small" onClick={() => void takeBack(entry.giftId)}>
                     Take it back

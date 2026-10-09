@@ -3,10 +3,10 @@
 import { MAX_NOTE_PLAINTEXT_BYTES } from "@moi/core/src/gift.js";
 import { MAX_GIFT_USD, MIN_GIFT_USD } from "@moi/core/src/create.js";
 import { useEffect, useId, useRef } from "react";
-import type { StocksState } from "@/lib/stocks";
+import type { Stock, StocksState } from "@/lib/stocks";
 import { acceptAmountText, byteLength, clipToBytes, shortHex, truncateUnits, usd } from "./format";
 import type { Balances } from "./reads";
-import { StockPicker } from "./StockPicker";
+import { isTradable, StockPicker } from "./StockPicker";
 
 export type WalletView =
   | { kind: "unavailable" }
@@ -17,6 +17,23 @@ export type WalletView =
 export type AmountChoice = "1" | "5" | "10" | "25" | "other";
 export type Days = 7 | 30 | 90;
 export type StorageState = "checking" | "ok" | "blocked";
+
+const STORAGE_NOTICE = "This browser is not saving site data, so Moi cannot keep your gift link safe. Allow site data for this site or use another browser.";
+
+/**
+ * The line under a disabled send button: the first thing missing, in the order a sender would fix
+ * it. A browser that cannot save the link comes first, because nothing else matters then. Nothing
+ * is said while a send is running or done, or when nothing is missing.
+ */
+export function sendHintFor(state: { running: boolean; storage: StorageState; connected: boolean; stock: Stock | null; amountOk: boolean }): string | null {
+  if (state.running) return null;
+  if (state.storage === "blocked") return STORAGE_NOTICE;
+  if (!state.connected) return "Connect your wallet first.";
+  if (state.stock === null) return "Pick a stock.";
+  if (!state.amountOk) return `Choose an amount from $${MIN_GIFT_USD} to $${MAX_GIFT_USD}.`;
+  if (!isTradable(state.stock)) return "That stock's market is closed right now.";
+  return null;
+}
 
 const PRESETS: readonly AmountChoice[] = ["1", "5", "10", "25"];
 const LIFETIMES: readonly Days[] = [7, 30, 90];
@@ -76,7 +93,7 @@ export type FormProps = {
   onNote: (text: string) => void;
   days: Days;
   onDays: (days: Days) => void;
-  storage: StorageState;
+  hint: string | null;
   canSend: boolean;
   onSend: () => void;
   locked: boolean;
@@ -177,10 +194,14 @@ export function SendFields(props: FormProps) {
         </div>
       </dl>
 
-      {props.storage === "blocked" ? <p className="send-pending-text">This browser blocks storage. Keep this tab open until your link appears.</p> : null}
       <button type="button" className="send-primary send-primary-tall" disabled={!props.canSend} onClick={props.onSend}>
         Send the gift
       </button>
+      {props.hint === null ? null : (
+        <p className="send-hint" role="status">
+          {props.hint}
+        </p>
+      )}
     </fieldset>
   );
 }

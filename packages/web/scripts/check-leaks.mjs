@@ -61,10 +61,13 @@ function needlesFor(env) {
   return { checked, skipped };
 }
 
-function* filesUnder(dir) {
+function* filesUnder(dir, top = dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) yield* filesUnder(path);
+    // WHY: the build's own cache is never deployed, and its packs grow past the longest string
+    // Node can hold, which crashed the scan once enough builds had run.
+    if (entry.isDirectory() && dir === top && entry.name === "cache") continue;
+    if (entry.isDirectory()) yield* filesUnder(path, top);
     else if (entry.isFile()) yield path;
   }
 }

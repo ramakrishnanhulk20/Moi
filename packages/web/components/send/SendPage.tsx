@@ -21,12 +21,12 @@ import { LinkCard } from "./LinkCard";
 import { MyGifts } from "./MyGifts";
 import { Preview } from "./Preview";
 import type { SendPreview } from "./devPreview";
-import { readBalances, readChainTime, refundGift, wasDeclined, type Balances } from "./reads";
+import { eraseFinishedKeys, readBalances, readChainTime, readClaimKeyUsed, refundGift, wasDeclined, type Balances } from "./reads";
 import { recoverRecord, type RecoveryIO, type RecoveryLine } from "./recovery";
 import { RecoveryBanner, type BannerWrap } from "./RecoveryBanner";
 import { applyStep, newSheet, restartWrap, wrapDone } from "./rows";
 import { advanceRun, messageOf, stopRun, walletOnRun, type Run } from "./run";
-import { ConnectRow, SendFields, type AmountChoice, type Days, type StorageState, type WalletView } from "./SendForm";
+import { ConnectRow, SendFields, sendHintFor, type AmountChoice, type Days, type StorageState, type WalletView } from "./SendForm";
 import { openWallet, walletSigner, type WalletPhase } from "./signer";
 import { isTradable } from "./StockPicker";
 import { addLink, addPending, dropDeclined, listLinks, listPending, removePending, storageChecked } from "./storage";
@@ -125,6 +125,24 @@ export function SendPage() {
     };
   }, [address, balanceTick, preview]);
 
+  // Gifts that are opened or taken back no longer need their link, so the keys are erased as soon as the list loads.
+  const openIds = saved.links
+    .filter((entry) => entry.final === undefined)
+    .map((entry) => entry.giftId)
+    .join(",");
+  useEffect(() => {
+    if (address === null || preview !== null || openIds === "") return;
+    let alive = true;
+    eraseFinishedKeys(address)
+      .then((changed) => {
+        if (alive && changed) reloadLists();
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [address, openIds, preview, reloadLists]);
+
   const balances = preview !== null ? preview.balances : held !== null && held.address === address ? held.balances : null;
   const pendingCount = preview !== null ? preview.pendingCount : saved.pending.length;
   const links = preview !== null ? preview.links : saved.links;
@@ -141,7 +159,10 @@ export function SendPage() {
   const amountOk = Number.isFinite(amount) && amount >= MIN_USD && amount <= MAX_USD;
   const shares = amountOk && price !== null ? amount / price : 0;
   const connected = address !== null;
-  const canSend = connected && stock !== null && isTradable(stock) && amountOk && storage !== "checking" && run.phase === "form";
+  // A gift is paid for only when this browser can keep the link: with storage blocked or still being checked, the button stays off.
+  const canSend = connected && stock !== null && isTradable(stock) && amountOk && storage === "ok" && run.phase === "form";
+
+  const sendHint = sendHintFor({ running: run.phase !== "form", storage, connected, stock, amountOk });
 
   const onWallet = useCallback((phase: WalletPhase, hash?: `0x${string}`) => setRun((current) => walletOnRun(current, phase, hash)), []);
 
@@ -154,7 +175,6 @@ export function SendPage() {
     if (!canSend || external === null || stock === null || address === null) return;
     const sender = address;
     const symbol = stock.symbol;
-    const usable = storage === "ok";
     setBannerLines(null);
     setRun({ phase: "sending", sheet: newSheet() });
     let signer: WalletSigner;
@@ -167,12 +187,13 @@ export function SendPage() {
     const deps: SendGiftDeps = { ...pageDeps(signer), vault: VAULT };
     const result = await driveSend(sendGift(deps, { stock: stock.address, usdAmount: amountText, note, expiryDays: days }), {
       onStep: (step) => setRun((current) => advanceRun(current, step)),
-      keepPending: (pending) => (usable ? addPending(sender, pending) : true),
-      keepLink: (giftId, link) => usable && addLink(sender, { giftId: giftId.toString(), link, symbol, createdAt: Date.now() }),
+      keepPending: (pending) => addPending(sender, pending),
+      keepLink: (giftId, link) => addLink(sender, { giftId: giftId.toString(), link, symbol, createdAt: Date.now() }),
       dropPending: (claimKey) => {
         removePending(sender, claimKey);
       },
       dropDeclined: (claimKey) => dropDeclined(sender, claimKey),
+      claimKeyUsed: readClaimKeyUsed,
     });
     if (!result.ok) setRun((current) => stopRun(current, result.error));
     finishSend();
@@ -243,6 +264,14 @@ export function SendPage() {
       const signer = await signerFor(external, (phase) => onPhase(phase === "in-wallet" ? "in-wallet" : "confirming"));
       await refundGift(signer, giftId);
       setBalanceTick((count) => count + 1);
+      // The gift is taken back, so its link is of no use any more.
+      if (address !== null) {
+        void eraseFinishedKeys(address)
+          .then((changed) => {
+            if (changed) reloadLists();
+          })
+          .catch(() => undefined);
+      }
       return null;
     } catch (error) {
       return wasDeclined(error) ? "You declined in your wallet, so nothing changed." : "The refund did not go through. Try again in a minute.";
@@ -319,7 +348,7 @@ export function SendPage() {
                 onNote={setNote}
                 days={days}
                 onDays={setDays}
-                storage={storage}
+                hint={sendHint}
                 canSend={canSend}
                 onSend={() => void start()}
                 locked={run.phase !== "form"}

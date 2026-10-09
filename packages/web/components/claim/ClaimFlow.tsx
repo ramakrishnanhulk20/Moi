@@ -35,6 +35,17 @@ const messageOf = (error: unknown): string => (error instanceof ClaimFlowError ?
 const canRetry = (error: unknown): boolean => !(error instanceof ClaimFlowError) || RETRY_CODES.has(error.code);
 const wasSent = (error: unknown): boolean => error instanceof ClaimFlowError && SENT_CODES.has(error.code);
 
+// The chain's own clock, in Unix seconds: the vault decides expiry by the latest block's time, and a
+// phone's clock can be wrong. If the block cannot be read, the phone's clock is the best guess left
+// (the vault still decides when the gift is opened).
+async function chainSeconds(): Promise<bigint> {
+  try {
+    return (await publicClient.getBlock({ blockTag: "latest" })).timestamp;
+  } catch {
+    return BigInt(Math.floor(Date.now() / 1000));
+  }
+}
+
 function claimDeps() {
   return { fetch: window.fetch.bind(window), origin: window.location.origin, publicClient, vault: VAULT };
 }
@@ -90,11 +101,13 @@ export function ClaimFlow({ giftId, boot }: { giftId: string; boot: ClaimKeyResu
       try {
         const result = await loadGift(claimDeps(), BigInt(giftId), key);
         if (cancelled) return;
-        setLoad(
-          result.keyMatches
-            ? { status: "loaded", gift: result.gift, note: result.note, expired: result.gift.expiry * 1000n <= BigInt(Date.now()) }
-            : { status: "invalid" },
-        );
+        if (!result.keyMatches) {
+          setLoad({ status: "invalid" });
+          return;
+        }
+        const now = await chainSeconds();
+        if (cancelled) return;
+        setLoad({ status: "loaded", gift: result.gift, note: result.note, expired: result.gift.expiry <= now });
       } catch (error) {
         if (cancelled) return;
         setLoad(error instanceof ClaimFlowError && LINK_CODES.has(error.code) ? { status: "invalid" } : { status: "failed", error });

@@ -8,7 +8,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { Grain } from "@/components/hero/Grain";
 import { VMark } from "@/components/hero/VMark";
 import { VAULT } from "@/lib/chain";
-import { addressCodeUrl, shortHex } from "@/lib/proof";
+import { addressUrl, shortHex, sourceUrl } from "@/lib/proof";
 import "./sections.css";
 
 // The root layout loads Fraunces upright only, so the italic cut is loaded here, as the hero does.
@@ -27,7 +27,7 @@ const RISE_STAGGER_SECONDS = 0.08;
 type Credit = { role: string; name: ReactNode };
 
 const vaultName = (
-  <a className="draw-link" href={addressCodeUrl(VAULT)} target="_blank" rel="noopener noreferrer">
+  <a className="draw-link" href={addressUrl(VAULT)} target="_blank" rel="noopener noreferrer">
     {`GiftVault, ${shortHex(VAULT)}`}
   </a>
 );
@@ -95,8 +95,11 @@ export function Credits() {
           <a className="draw-link" href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
             GitHub
           </a>
-          <a className="draw-link" href={addressCodeUrl(VAULT)} target="_blank" rel="noopener noreferrer">
+          <a className="draw-link" href={addressUrl(VAULT)} target="_blank" rel="noopener noreferrer">
             Contract on BscScan
+          </a>
+          <a className="draw-link" href={sourceUrl(VAULT)} target="_blank" rel="noopener noreferrer">
+            Verified source
           </a>
         </nav>
         <p className="credits-fine">
