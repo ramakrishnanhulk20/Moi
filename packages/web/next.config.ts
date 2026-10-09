@@ -25,6 +25,10 @@ const nextConfig: NextConfig = {
   // Otherwise next dev writes an AGENTS.md scaffold back into the app on every start.
   agentRules: false,
   poweredByHeader: false,
+  // The gift link's share image renders on request and reads its fonts from app/og at run time.
+  outputFileTracingIncludes: {
+    "/g/[id]/opengraph-image": ["./app/og/*"],
+  },
   // Builds run on webpack, not Turbopack: core is TypeScript source imported by ".js" paths, which
   // Turbopack 16.4 cannot map to the ".ts" files and webpack's extensionAlias can.
   webpack(config) {

@@ -13,11 +13,12 @@ let fonts: Promise<CardFonts> | undefined;
 
 export function loadFonts(): Promise<CardFonts> {
   fonts ??= (async () => {
-    const read = (file: string) => readFile(join(process.cwd(), "app", "og", file));
+    // Each path is spelled out in full so the deploy's file tracing sees it and ships the font with
+    // the function; a path built from a variable is invisible to it and the image answers 500.
     const [bold, boldItalic, mono] = await Promise.all([
-      read("Fraunces-Bold.woff"),
-      read("Fraunces-BoldItalic.woff"),
-      read("JetBrainsMono-Medium.ttf"),
+      readFile(join(process.cwd(), "app/og/Fraunces-Bold.woff")),
+      readFile(join(process.cwd(), "app/og/Fraunces-BoldItalic.woff")),
+      readFile(join(process.cwd(), "app/og/JetBrainsMono-Medium.ttf")),
     ]);
     return [
       { name: "Fraunces", data: bold, weight: 700, style: "normal" },

@@ -26,8 +26,16 @@ const mono = JetBrains_Mono({
 // can carry it; a page prerendered at build time would have its scripts blocked.
 export const dynamic = "force-dynamic";
 
+// Share previews need an absolute address. Vercel names the production domain itself, so the cards
+// stay right even when MOI_PUBLIC_ORIGIN is missing from the environment the metadata is built in.
+function siteOrigin(): string {
+  if (process.env.MOI_PUBLIC_ORIGIN) return process.env.MOI_PUBLIC_ORIGIN;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  return "http://localhost:3000";
+}
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.MOI_PUBLIC_ORIGIN || "http://localhost:3000"),
+  metadataBase: new URL(siteOrigin()),
   title: { default: "Moi: give someone their first stock", template: "%s · Moi" },
   description: "Send a real share of Nvidia, Apple or the S&P 500 as a link. Your friend opens it, signs in with Google, and owns it.",
   openGraph: { type: "website", siteName: "Moi" },
