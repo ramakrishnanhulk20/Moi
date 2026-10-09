@@ -6,7 +6,7 @@ Send someone their first stock as a link. They sign in with Google and own a rea
 
 Moi is the gift of money that Tamil families give at weddings, written in the family's notebook so it can be returned one day; here the gift is a real share of a company and the notebook is BNB Chain.
 
-[Live app]({{LIVE_URL}}) · [Documentation]({{LIVE_URL}}/docs) · [Demo video]({{VIDEO_URL}})
+[Live app](https://moi-gift.vercel.app) · [Documentation](https://moi-gift.vercel.app/docs) · [Demo video]({{VIDEO_URL}})
 
 Built for BNB Hack: Tokenized Stocks Edition. Everything below runs on BNB Smart Chain mainnet (chain id 56) with real tokenized stocks.
 
@@ -178,7 +178,7 @@ flowchart TB
 
 ### a. Claim a real share
 
-1. Open {{LIVE_URL}} and scroll to the section marked FOR JUDGES. The top bar also has a "For judges" link.
+1. Open https://moi-gift.vercel.app and scroll to the section marked FOR JUDGES. The top bar also has a "For judges" link.
 2. Sign in with Google or email.
 3. Type the judge code from the submission form.
 4. Tick the declaration that you are not a US person and not in the US or a restricted region.
@@ -273,11 +273,11 @@ Copy `.env.example` to `.env` at the repo root and fill it in. Never commit it. 
 | `BSC_RPC_URL` | Optional. A BNB Smart Chain node, https only. Default `https://bsc-dataseed.bnbchain.org`. | Any BNB Chain node provider |
 | `MOI_ALLOW_MEMORY_STORE`, `MOI_DEV_COUNTRY`, `MOI_DEV_ALLOW_UNKNOWN_COUNTRY`, `PORT` | Local development only: run without Upstash in one process, the country a local request claims, and the port for `npm run serve`. | You choose them |
 
-To run the sender agent, install the Binance Agentic Wallet command line with `npm install -g @binance/agentic-wallet@1.10.0`, put the five agent settings in `.env`, and run `npm run moi -- signin`. The commands are `status`, `signin`, `gift <TICKER> <USD>`, `gift <TICKER> --use-held <AMOUNT>` and `wrap <GIFT_ID>`, with the flags `--note`, `--days` and `--yes`. [The agent page]({{LIVE_URL}}/docs/agent) has the rest.
+To run the sender agent, install the Binance Agentic Wallet command line with `npm install -g @binance/agentic-wallet@1.10.0`, put the five agent settings in `.env`, and run `npm run moi -- signin`. The commands are `status`, `signin`, `gift <TICKER> <USD>`, `gift <TICKER> --use-held <AMOUNT>` and `wrap <GIFT_ID>`, with the flags `--note`, `--days` and `--yes`. [The agent page](https://moi-gift.vercel.app/docs/agent) has the rest.
 
 ## Contracts and API
 
-GiftVault is Moi's only contract. These are its functions; [the contracts page]({{LIVE_URL}}/docs/contracts) has what makes each one revert.
+GiftVault is Moi's only contract. These are its functions; [the contracts page](https://moi-gift.vercel.app/docs/contracts) has what makes each one revert.
 
 | Function | Who can call it | What it does |
 |---|---|---|
@@ -291,7 +291,7 @@ GiftVault is Moi's only contract. These are its functions; [the contracts page](
 | `transferOwnership(address newOwner)` and `acceptOwnership()` | Owner, then the new owner | Two-step ownership change. |
 | `renounceOwnership()` | Nobody | Always reverts. |
 
-Moi's server answers six endpoints under `/api`, all JSON, with a fixed error code on every refusal. [The API page]({{LIVE_URL}}/docs/api) has example requests, every error code and the limits.
+Moi's server answers six endpoints under `/api`, all JSON, with a fixed error code on every refusal. [The API page](https://moi-gift.vercel.app/docs/api) has example requests, every error code and the limits.
 
 | Endpoint | What it does |
 |---|---|
