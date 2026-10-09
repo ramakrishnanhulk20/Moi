@@ -6,7 +6,7 @@ Send someone their first stock as a link. They sign in with Google and own a rea
 
 Moi is the gift of money that Tamil families give at weddings, written in the family's notebook so it can be returned one day; here the gift is a real share of a company and the notebook is BNB Chain.
 
-[Live app](https://moi-gift.vercel.app) · [Documentation](https://moi-gift.vercel.app/docs) · [Demo video]({{VIDEO_URL}})
+[Live app](https://moi-gift.vercel.app) · [Documentation](https://moi-gift.vercel.app/docs)
 
 Built for BNB Hack: Tokenized Stocks Edition. Everything below runs on BNB Smart Chain mainnet (chain id 56) with real tokenized stocks.
 
@@ -43,8 +43,10 @@ The live transactions behind the claims in this README, all successful on chain:
 | Gift 1 claimed into a brand-new wallet, gas paid by Moi's relayer | [0x6a13...78e8](https://bscscan.com/tx/0x6a13e2e8f14630a8a4777bf7bae7befa21154fe64ba0e64d58a7ccdca71978e8) |
 | Gift 2 made by the Binance Agentic Wallet: the 5-cent gift wrap paid through b402 | [0x8ec1...38d6](https://bscscan.com/tx/0x8ec1e0666350aa500bbf2f7d36b1cd97bb8dfb2e9fd5ba328b75b899a36c38d6) |
 | Gift 2 claimed, no gas paid by the friend | [0x660e...e28e](https://bscscan.com/tx/0x660e8ebcc983db623db05e87fa7e0c7f4583ff208f7fdb884864d86c0825e28e) |
+| Gift 3, a judge gift, claimed from the home page's judges section on 9 October 2026 | [0x2964...0eb6](https://bscscan.com/tx/0x2964c2a78897a96976e4237bd103c6e7c163eabbf2a8a956e5e0873fba000eb6) |
+| Gift 11 claimed on a phone with Google on 9 October 2026, about 25 seconds after opening the link | [0x9342...c73d](https://bscscan.com/tx/0x9342094463ac3c5b725b061e6f6a8e9a40da25041e2f43931c28c37ef4b7c73d) |
 
-On 8 October 2026, at block 126,462,407, the vault had made 10 gifts: gifts 1 and 2 claimed, and gifts 3 to 10 open. The open ones are the judge gifts, each about one US dollar of NVDAB. Read `nextGiftId()` and subtract one to count the gifts yourself.
+On 9 October 2026, at block 126,600,254, the vault had made 11 gifts: 4 opened (gifts 1, 2, 3 and 11) and 7 waiting to be opened (gifts 4 to 10), and the waiting ones are the judge gifts. Each judge gift is about one US dollar of NVDAB. For the count right now, read the LIVE ON BNB CHAIN band on the [home page](https://moi-gift.vercel.app), or read `nextGiftId()` on the vault and subtract one.
 
 ## What Moi is
 
@@ -60,7 +62,7 @@ A bStock records dividends by raising an on-chain multiplier, `uiMultiplier()`, 
 | What the friend needs | A brokerage account of their own | A Google or email account |
 | Paperwork | Account opening and a transfer form between the two brokers | One link |
 | Identity checks | Both brokers run them | Moi runs none. The stock's issuer bars US persons, so Moi refuses requests from restricted places and asks the friend to declare they are not a US person |
-| Time | Typically several business days, depending on the brokers | About thirty seconds from opening the link to owning the share. This is the design target. It has not been timed end to end with a person yet |
+| Time | Typically several business days, depending on the brokers | About thirty seconds is the design target. Measured once, by hand: on 9 October 2026 a phone claim with Google took about 25 seconds from opening the link to owning the share (gift 11, [claim transaction](https://bscscan.com/tx/0x9342094463ac3c5b725b061e6f6a8e9a40da25041e2f43931c28c37ef4b7c73d)) |
 | If the friend never opens it | Depends on the brokers | The sender takes the gift back after it expires, 1 to 90 days |
 
 ## Features
@@ -179,16 +181,16 @@ flowchart TB
 ### a. Claim a real share
 
 1. Open https://moi-gift.vercel.app and scroll to the section marked FOR JUDGES. The top bar also has a "For judges" link.
-2. Sign in with Google or email.
-3. Type the judge code from the submission form.
+2. Press "Sign in to claim" and sign in with Google or email. If you use email, Privy sends a code to your inbox and you type it in. Moi makes a wallet for you, and the button now reads "Claim my share".
+3. Type the judge code from the submission form into the box.
 4. Tick the declaration that you are not a US person and not in the US or a restricted region.
 5. Press "Claim my share". Your wallet signs a short message that proves the wallet is yours, then Moi sends the share and pays the fee. The page shows "It's yours." and a link to the transaction on BscScan.
 
-Each judge gets one gift. If every judge gift is gone, the page says so.
+Each judge gets one gift. Moi allows one gift per sign-in, one gift per network a day, and at most four judge gifts an hour across all judges, so in a busy hour the page asks you to try again in an hour. If every judge gift is gone, the page says so.
 
 ### b. Read the chain yourself
 
-You need Foundry's `cast` and no keys. These three calls read the live vault. The answers below were read on 8 October 2026 at block 126,460,987.
+You need Foundry's `cast` and no keys. Install Foundry with `curl -L https://foundry.paradigm.xyz | bash`, then run `foundryup`; [getfoundry.sh](https://getfoundry.sh) has the other ways. These three calls read the live vault, and they are the proof that needs no setup. The answers below were read on 9 October 2026 at block 126,600,254.
 
 ```bash
 cast call 0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C "nextGiftId()(uint256)" --rpc-url https://bsc-dataseed.bnbchain.org
@@ -197,14 +199,21 @@ cast call 0x808EB6B3dC1ad50Ca114F5eA9d053BEAd958975C "getGift(uint256)((address,
 ```
 
 ```text
-11
+12
 [0x431a3BEE82E2ca41e49895CbECE5bB0F76A89b7A, 0x02Fca66C1D1aFB4E2A7884261eB00F63598a7436, 0x5b1910eAaD6450E50f816082Aa078C41F10C292f, 0x80106cb3EAD06659A5ad19DF39D9b4733863B9b0, 0x1a4b499833A79A09ad7Cf1D42D7DacF71e92eb00, 0x3F53De71c126BdaBAe20f9cD64848d317f6C3238, 0x7425889FE94F9d693E8daefE88BCCed6AcFEf4c0, 0x7138b48df7D98D7e3cc221BfE7192D0a178182D8, 0x205812CdBed920aFf76C6580abD681a46D11efc7]
 (0x02Fca66C1D1aFB4E2A7884261eB00F63598a7436, 0x69F1Cc47f7969dC8E2B0b1369059591A674FB15f, 0x69d6066Ee190C475652ECD464744B41A71Fce7E5, 1793982059 [1.793e9], 2, 4214744620731743 [4.214e15], 0x013b99157c...)
 ```
 
-`nextGiftId()` was 11, so 10 gifts exist. In the `getGift` answer the fifth value is the state: 0 none, 1 open, 2 claimed, 3 refunded. Gift 1 shows 2. The last value is the sealed note, cut short here. The gift number rises as people send gifts.
+`nextGiftId()` is the number the next gift will get, so the gifts made so far are that number minus one. In the `getGift` answer the fifth value is the state: 0 none, 1 open, 2 claimed, 3 refunded. Gift 1 shows 2. The last value is the sealed note, cut short here. Both numbers rise as people send and open gifts.
 
-The full proof script is `npm run prove`. It is a dry run that prints the plan for buying 1 USDT of NVDAB, lists the vault's tokens, signs nothing and prints `Dry run complete. Nothing was signed or sent.` With `MOI_LIVE=1` it spends 1 USDT on mainnet: it buys NVDAB, gifts it, claims it into a brand-new wallet through the relayer, checks every step on chain and prints `PROVED: bought, gifted and claimed into a brand-new wallet through the relayer.` Either run then lists how long each Binance call took. Both modes load the whole `.env` first, so they need your own keys (see the quick start). Gift 1 in the transactions table was made by a live run of this script. The printout of that run is not saved in the repo, so the chain is its record.
+The full proof script is `npm run prove`. It needs more setup than the three reads above, so those reads are the no-setup proof. Both modes load the whole `.env` first and stop with a named error unless `OC_API_KEY`, `OC_SECRET_KEY`, `DEPLOYER_PRIVATE_KEY` and `RELAYER_PRIVATE_KEY` are all there and well formed. `MOI_VAULT_ADDRESS` is optional in the dry run and required in the live run.
+
+- Dry run, `npm run prove`: reads the chain, asks Binance for a quote and a swap for 1 USDT of NVDAB for the deployer wallet, lists the vault's tokens and prints the plan. The script checks no balance, signs nothing and sends nothing. It ends with `Dry run complete. Nothing was signed or sent.`
+- Live run, `MOI_LIVE=1 npm run prove`: spends 1 USDT on mainnet. The deployer wallet signs and sends the USDT approval for the trading router (only if its allowance is short), the swap into NVDAB, the vault approval and `createGift`. The relayer wallet then sends the claim into a brand-new wallet. The deployer wallet therefore needs at least 1 USDT and some BNB for gas, and the relayer wallet needs some BNB. The run prints `PROVED: bought, gifted and claimed into a brand-new wallet through the relayer.` only after it has checked every step on chain.
+
+Before it sends anything, the live run refuses to start unless the vault lists NVDAB, is not paused and names the address of `RELAYER_PRIVATE_KEY` as its relayer. So it cannot claim through Moi's own relayer: run it against a vault you deployed yourself with `packages/contracts/deploy.sh`. Also set `MOI_SPONSOR_ADDRESS` to the deployer wallet's address. The run's gift is not wrapped, and the claim rule delivers an unwrapped gift only from the sponsor wallet. Without that setting the claim is refused after the gift is locked, and the gift waits in the vault until it expires and `refund` returns it.
+
+Either run then lists how long each Binance call took. Gift 1 in the transactions table was made by a live run of this script. The printout of that run is not saved in the repo, so the chain is its record.
 
 ### c. Run the attacks
 
@@ -228,7 +237,7 @@ The second command needs Foundry's `anvil` and a built `packages/contracts/out` 
 
 ## Quick start for developers
 
-You need Node 22 or newer and npm, and Foundry for the contracts. The counts below were run on Node 26.7.0, npm 11.19.0 and forge 1.8.1.
+You need Node 22 or newer and npm, and Foundry for the contracts. Install Foundry with `curl -L https://foundry.paradigm.xyz | bash`, then run `foundryup` ([getfoundry.sh](https://getfoundry.sh) has the other ways). The repo pins no Foundry version: `foundry.toml` pins only the Solidity compiler, 0.8.28. The counts below were run on Node 26.7.0, npm 11.19.0 and forge 1.8.1.
 
 ```bash
 git clone https://github.com/ramakrishnanhulk20/Moi.git
@@ -244,18 +253,18 @@ Three more commands, each of which needs `.env`:
 
 ```bash
 npm run slice                       # live quote, checks and simulations, nothing signed
-npm run prove                       # the dry run described above
+npm run prove                       # the dry run described above; needs the four keys, spends nothing
 npm run dev --workspace=@moi/web    # the website on http://127.0.0.1:3000
 ```
 
-Copy `.env.example` to `.env` at the repo root and fill it in. Never commit it. The tests need no `.env`; the commands above do. Names only below, with where a stranger gets each value:
+Copy `.env.example` to `.env` at the repo root and fill it in. Never commit it. The tests need no `.env`; the commands above do. Of the names below, `npm run slice` and `npm run prove` need only `OC_API_KEY`, `OC_SECRET_KEY`, `DEPLOYER_PRIVATE_KEY` and `RELAYER_PRIVATE_KEY`. Names only, with where a stranger gets each value:
 
 | Name | What it is for | Where you get it |
 |---|---|---|
 | `OC_API_KEY`, `OC_SECRET_KEY` | Moi signs every Binance Web3 API request with these. | The Binance Web3 API developer portal, web3.binance.com/en/dev-portal |
 | `DEPLOYER_PRIVATE_KEY` | Deploys the vault and is the test sender in scripts. Fund it with a little BNB and USDT on BSC. | A new wallet you make for this |
 | `RELAYER_PRIVATE_KEY` | Sends claims and pays their gas. It holds nothing else. Fund it with a little BNB. | A second new wallet |
-| `ETHERSCAN_API_KEY` | Verifies the vault on BscScan. | etherscan.io/myapikey. The free plan refused chain 56 when checked on 7 October 2026, and Sourcify needs no key |
+| `ETHERSCAN_API_KEY` | Used only by `packages/contracts/verify.sh`, which stops at the start if it is empty. Nothing else reads it. | etherscan.io/myapikey. The free plan did not cover chain 56 when checked on 7 October 2026, so the BscScan step needs a paid plan. The Sourcify step needs no key, and the live vault's source is verified there |
 | `NEXT_PUBLIC_PRIVY_APP_ID` | The Privy app that signs the friend in. Public, not a secret, 25 characters. | An app you create at dashboard.privy.io |
 | `MOI_RELAYER_ADDRESS` | Public address of the relayer wallet. The deploy script reads it so it never needs the relayer key. | The address of the relayer wallet |
 | `MOI_OWNER_ADDRESS` | The wallet that will own the vault. Required for a mainnet deploy. | A wallet you control |
@@ -273,7 +282,7 @@ Copy `.env.example` to `.env` at the repo root and fill it in. Never commit it. 
 | `BSC_RPC_URL` | Optional. A BNB Smart Chain node, https only. Default `https://bsc-dataseed.bnbchain.org`. | Any BNB Chain node provider |
 | `MOI_ALLOW_MEMORY_STORE`, `MOI_DEV_COUNTRY`, `MOI_DEV_ALLOW_UNKNOWN_COUNTRY`, `PORT` | Local development only: run without Upstash in one process, the country a local request claims, and the port for `npm run serve`. | You choose them |
 
-To run the sender agent, install the Binance Agentic Wallet command line with `npm install -g @binance/agentic-wallet@1.10.0`, put the five agent settings in `.env`, and run `npm run moi -- signin`. The commands are `status`, `signin`, `gift <TICKER> <USD>`, `gift <TICKER> --use-held <AMOUNT>` and `wrap <GIFT_ID>`, with the flags `--note`, `--days` and `--yes`. [The agent page](https://moi-gift.vercel.app/docs/agent) has the rest.
+To run the sender agent, install the Binance Agentic Wallet command line with `npm install -g @binance/agentic-wallet@1.10.0`, put the five agent settings in `.env` (`MOI_VAULT_ADDRESS`, `MOI_PAYOUT_ADDRESS`, `MOI_SERVER_ORIGIN`, `MOI_PUBLIC_ORIGIN` and the optional `BSC_RPC_URL`), and run `npm run moi -- signin`. The commands are `status`, `signin`, `gift <TICKER> <USD>`, `gift <TICKER> --use-held <AMOUNT>` and `wrap <GIFT_ID>`, with the flags `--note`, `--days` and `--yes`. [The agent page](https://moi-gift.vercel.app/docs/agent) has the rest.
 
 ## Contracts and API
 
@@ -329,7 +338,7 @@ What these do not cover: the website's pages, its Content Security Policy and th
 
 | Action | Gas | BNB at 0.05 gwei | Who pays |
 |---|---|---|---|
-| A claim | About 145,000 inside the call on the live vault (measured cold on a fork). The two real mainnet claims used 127,109 each. | About 0.0000073 BNB. The two real claims cost 0.0000064 BNB each. | Moi's relayer |
+| A claim | About 145,000 inside the call on the live vault (measured cold on a fork). The first two mainnet claims used 127,109 each and the next two about 136,700. | About 0.0000073 BNB. The real claims cost 0.0000064 to 0.0000068 BNB each. | Moi's relayer |
 | Creating a gift | About 233,000 with an empty note on the live vault. Gift 1, with a 67-byte sealed note, used 348,697. | About 0.0000117 BNB for the empty-note figure | The sender |
 
 The mainnet claims and gift 1 paid 0.05 gwei per gas, read from their receipts. The 145,000 and 233,000 figures come from the attack run in [docs/security/attacks/contract.txt](docs/security/attacks/contract.txt). The relayer's default limits are a 3 gwei ceiling and 0.002 BNB a day.
@@ -365,7 +374,7 @@ The rules the code keeps are numbered C1 to C50 in [docs/security/threat-model.m
 - A claim needs a signature by that gift's own key over this vault, this chain, this gift and this recipient. Only Moi's relayer can submit it, and it still needs that signature.
 - Nobody, the owner included, can move a gift. The vault has no upgrade path and the owner cannot renounce.
 - The vault refuses to release a gift whose original sender the stock's own compliance contract now refuses.
-- The claim key never reaches Moi's server. In the scripted claim run it appeared in none of the 2 requests to Moi or the 10 requests to the chain. In the server attack run, 22 secrets were searched for in 110 responses and 73 log lines and none was found.
+- The claim key never reaches Moi's server. In the scripted claim run, every request the claim page's flow made to Moi and to the chain node was recorded, and the key appeared in none of their addresses, headers or bodies. In the server attack run, 22 secrets were searched for in 110 responses and 73 log lines and none was found.
 - Every transaction handed to a sender is checked before it is handed over, and the sender agent signs only values it pinned itself.
 
 The attack record is 60 attacks, all refused: 19 against the live vault's code on a mainnet fork and 41 against the server in process. Rules C13 and C29 cannot be scripted and are marked not run, and the Google sign-in leg of C12 needs a real browser. [docs/security/attacks/README.md](docs/security/attacks/README.md) lists every rule, the attack, where it ran and what came back, with the raw output in [contract.txt](docs/security/attacks/contract.txt) and [server.txt](docs/security/attacks/server.txt).

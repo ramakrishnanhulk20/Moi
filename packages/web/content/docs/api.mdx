@@ -325,13 +325,15 @@ Every refusal is a fixed code. Two kinds of answer can come before any endpoint 
 | Code | Status | Meaning |
 |---|---|---|
 | `bad_judge_code` | 403 | The judge code is wrong. |
-| `rate_limited`, `too_many_from_network` | 429 | Too many tries, or a judge gift already went to someone on this network today. |
+| `rate_limited`, `too_many_from_network` | 429 | Too many tries, or a judge gift already went to someone on this network today. A network is one IPv4 address or one IPv6 /64. |
+| `judges_busy` | 429 | Four judge gifts already went out this hour. Try again in an hour. |
 | `bad_request` | 400 | The body is not the expected shape. |
 | `bad_token`, `token_expired` | 401 | The Privy sign-in could not be read, or has expired. |
 | `bad_recipient`, `bad_wallet_proof` | 400 | The wallet is not usable, or its signature could not be read. |
 | `proof_expired` | 401 | The wallet proof is more than 5 minutes old, or the device clock is wrong. |
 | `wallet_not_verified` | 403 | The signature did not come from the wallet named. |
 | `no_declaration`, `restricted_place`, `unknown_place`, `unknown_network` | 403 | The declaration, place or network check failed. |
+| `claim_pending` | 202 | The claim was sent but not confirmed yet. The judge keeps the gift and must not claim again. |
 | `already_claimed` | 409 | This judge already claimed a gift. |
 | `pool_empty` | 410 | Every judge gift has been handed out. |
 | `try_again`, `gift_expiring`, `claim_refused` | 503, 409, 409 | The handout could not finish, the next gift was about to expire, or the vault refused. Try again. |

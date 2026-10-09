@@ -25,7 +25,7 @@ The threat model has 50 numbered rules, C1 to C50. Here they are grouped by who 
 
 - Claim keys come from the browser's secure random source, never from anything guessable (C11).
 - The key never appears in any network request: not to Moi, not to analytics, error reporting or logs, not to the wallet provider, and not in a sign-in redirect (C12). No page under `/g/` redirects to another site (C13).
-- Nothing a sender writes or a token reports can run as code on the page. Notes and token names show as plain text, and a Content Security Policy blocks inline script and every third-party script except the wallet provider's (C14).
+- Nothing a sender writes or a token reports can run as code on the page. Notes and token names show as plain text, and a Content Security Policy blocks inline script. The one outside script host it allows is Cloudflare's bot check, which Privy's sign-in uses (C14). The full list of allowed origins is [at the end of this page](#what-the-content-security-policy-allows).
 - The page shows a gift's contents only after checking that the key in the link produces the key address stored for that gift. A real gift number paired with a fake key shows "not valid" (C15).
 - A claim is sent only after the friend, signed in, taps "Open your gift". Loading the page never claims, even if a link scanner opens it. The recipient must be a plain wallet that the friend can export, never a contract. The page says "claimed" only when a confirmed receipt shows that gift claimed to that wallet (C16).
 - The wallet provider app accepts sessions only from Moi's own site and from localhost in development (C29). The longest gift lifetime is no longer than the time Moi commits to keep its domain, so a link opened after the domain changes hands has already expired (C28).
@@ -100,4 +100,22 @@ The claim key is the only thing that opens a gift, so it gets the most care.
 5. The key signs the claim inside the browser. Only the signature, the gift number, the friend's wallet and the declaration go to Moi.
 6. When the receipt confirms the claim, the page erases the key from the tab.
 
-Other protections sit around this. The site sends `Referrer-Policy: no-referrer`, so the link never travels in a Referer header. No page redirects to another site. The Content Security Policy blocks inline script and limits where the page can send data.
+Other protections sit around this. The site sends `Referrer-Policy: no-referrer`, so the link never travels in a Referer header. No page redirects to another site. The Content Security Policy blocks inline script and limits where the page can send data. The next section lists what it allows.
+
+## What the Content Security Policy allows
+
+Every page carries one Content Security Policy header. It is the list of outside addresses the page may load from or talk to, and anything not on it is blocked. This list was read from the live header and from `packages/web/proxy.ts` on 9 October 2026. The Privy and WalletConnect entries follow [Privy's guide to Content Security Policy](https://docs.privy.io/security/implementation-guide/content-security-policy). The page's own address is allowed wherever it is needed, and these outside origins are allowed:
+
+| Origin | Allowed for | Why |
+|---|---|---|
+| `https://challenges.cloudflare.com` | Scripts and frames | Cloudflare Turnstile, the bot check Privy's sign-in uses. It is the only outside script host. |
+| `https://auth.privy.io` | Connections and frames | Privy's sign-in service and its sign-in window. |
+| `https://*.rpc.privy.systems` | Connections | Privy's own chain nodes. |
+| `https://bsc-dataseed.bnbchain.org` | Connections | BNB Chain's public node, where the page reads the vault and confirms receipts. |
+| `wss://relay.walletconnect.com` and `wss://relay.walletconnect.org` | Connections | WalletConnect's relay, which carries a phone wallet's messages. |
+| `wss://www.walletlink.org` | Connections | The relay Coinbase Wallet uses. |
+| `https://verify.walletconnect.com` and `https://verify.walletconnect.org` | Frames | WalletConnect's verification frames. |
+| `https://explorer-api.walletconnect.com` | Connections and images | WalletConnect's wallet list and the wallet icons in the connect window. |
+| `https://*.bnbstatic.com` | Images | Binance's stock logos. |
+
+The rest of the policy is strict. Scripts run only if they carry the one-time nonce made for that response, or were loaded by a script that does, so inline script without the nonce never runs. Inline styles are allowed, because Privy's sign-in window writes its styles inline and a nonce would switch that off. Fonts, workers and the manifest come only from the page's own address. Plugins are blocked, forms and the base address stay on the page itself, and no other site may put Moi in a frame. In development only, the policy also allows `'unsafe-eval'`, because React needs it there. Production never does.

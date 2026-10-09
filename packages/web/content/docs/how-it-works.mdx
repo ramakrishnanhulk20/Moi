@@ -44,7 +44,7 @@ Two pieces that are not from Binance matter just as much. Without the relayer, t
 ## How the parts connect
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph Sender
     W[Browser wallet] -->|buy, approve, createGift, b402 signature| WEB
     A[moi agent on the Binance Agentic Wallet] -->|baw swap, contract-call, x402-payment| CHAIN

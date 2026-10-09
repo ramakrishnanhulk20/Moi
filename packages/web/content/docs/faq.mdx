@@ -11,7 +11,7 @@ No. You open the link and sign in with Google or email, and Moi makes a wallet f
 
 ### Who pays the network fee?
 
-The friend pays nothing. Moi's relayer wallet sends the claim and pays its gas, which was 127,109 gas for each of the two live claims. The sender pays the network fee for their own transactions, plus the 5-cent gift wrap.
+The friend pays nothing. Moi's relayer wallet sends the claim and pays its gas, which was 127,109 gas for each of the first two live claims and about 136,700 for the next two. The sender pays the network fee for their own transactions, plus the 5-cent gift wrap.
 
 ### What if my friend never opens it?
 
@@ -61,4 +61,10 @@ A bStock is a token on BNB Smart Chain, issued by Binance's partner and backed o
 
 ### What if the stock market is closed?
 
-Moi shows each stock's market status, read from Binance RWA Data. A claim and a refund never trade, and the vault reads no prices, so a closed market cannot stop a friend from opening a gift or a sender from taking one back. A purchase must pass Moi's price check, and a quote more than 2 percent above the reference price is refused, not repaired. Today RWA Data gives no market status for AAPLB and AMZNB, so those two show as unknown.
+The send page reads each stock's market status from Binance RWA Data and treats it like this:
+
+- Known to be closed: the stock's tile is dimmed and cannot be picked. It says CLOSED or, when Binance gives the next opening time, OPENS with that time in your own time zone on a 24-hour clock, such as OPENS 14:30 for today or OPENS MON 14:30 for another day. On a narrow screen a closed tile also hides its price. A closed stock that is already picked keeps the Send button off, and the line under the button says "That stock's market is closed right now."
+- Known to be open: the tile has no label and can be picked.
+- Unknown: Binance sends no market status for the stock. Today that is the case for AAPLB and AMZNB. Their tiles show no label and can be picked, because the page does not guess that a market is closed. The checks at the quote step still apply.
+
+A purchase must pass Moi's price check. A quote more than 2 percent above the reference price is refused, not repaired, and so is a stock with no reference price at all. A claim and a refund never trade, and the vault reads no prices, so a closed market cannot stop a friend from opening a gift or a sender from taking one back.

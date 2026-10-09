@@ -22,7 +22,7 @@ If the gift has already been opened, taken back or has expired, the page says so
 You need a browser wallet such as MetaMask or the Binance Web3 Wallet, set to BNB Smart Chain. Hold USDT in it to pay for the share, and a little BNB for network fees. In the live runs a swap used 358,378 gas and locking a gift used 348,697 gas.
 
 1. Open the send page and connect your wallet.
-2. Pick one of the nine stocks and an amount from 1 to 100 US dollars. Write a note if you like, up to 483 bytes of text. It is sealed, so only the link can open it.
+2. Pick one of the nine stocks and an amount from 1 to 100 US dollars. A stock whose market is closed is dimmed and cannot be picked: the [FAQ](/docs/faq#what-if-the-stock-market-is-closed) says exactly what the page shows. Write a note if you like, up to 483 bytes of text. It is sealed, so only the link can open it.
 3. Choose how long the gift stays open: 7, 30 or 90 days. The default is 30 days. The agent accepts any whole number of days from 1 to 90.
 4. Sign what your wallet asks, one step at a time:
    - If it has not been done, allow the trading router to spend exactly your USDT amount.
@@ -41,12 +41,12 @@ If you would rather send from the command line, use [the sender agent](/docs/age
 The judges section on the home page gives each judge one real stock gift of about one US dollar. The gifts were made from Moi's own wallet before judging, and Moi's relayer delivers them with no wrapping fee.
 
 1. Open the judges section on the home page.
-2. Sign in with Google or email. Moi makes a wallet for you.
-3. Type the judge code from our submission.
+2. Press "Sign in to claim" and sign in with Google or email. If you use email, Privy sends a code to your inbox and you type it in. Moi makes a wallet for you, and the button now reads "Claim my share".
+3. Type the judge code from our submission into the box.
 4. Tick the declaration that you are not a US person and not in a restricted place.
-5. Tap the button. Your wallet signs a short message that proves the wallet is yours, and Moi sends the request. The gift lands in your new wallet, and Moi pays the network fee.
+5. Press "Claim my share". Your wallet signs a short message that proves the wallet is yours, and Moi sends the request. The gift lands in your new wallet, and Moi pays the network fee.
 
-Each judge gets one gift. Moi allows one gift per sign-in for 30 days, and one gift per network a day. More than five wrong codes in a minute from one network are refused for that minute. If every judge gift has been handed out, the page says "All the judge gifts have been handed out. Ask the Moi team for another."
+Each judge gets one gift. Moi allows one gift per sign-in for 30 days, one gift per network a day, and at most four judge gifts in any hour. More than five wrong codes in a minute from one network are refused for that minute. If every judge gift has been handed out, the page says "All the judge gifts have been handed out. Ask the Moi team for another."
 
 To check the result, look at the transaction on BscScan. You will see the vault's `GiftClaimed` event for a gift number and your new wallet as the recipient.
 
@@ -55,7 +55,7 @@ To check the result, look at the transaction on BscScan. You will see the vault'
 ### What you need
 
 - Node 22 or newer, and npm. The counts below were run on Node 26.7.0 and npm 11.19.0.
-- Foundry for the contracts. The counts below were run on forge 1.8.1. The vault is Solidity 0.8.28, and `install-deps.sh` installs OpenZeppelin v5.7.0 and forge-std v1.17.0.
+- Foundry for the contracts. Install it with `curl -L https://foundry.paradigm.xyz | bash` and then `foundryup`; [getfoundry.sh](https://getfoundry.sh) has the other ways. The repo pins no Foundry version, and `foundry.toml` pins only the Solidity compiler, 0.8.28. The counts below were run on forge 1.8.1. `install-deps.sh` installs OpenZeppelin v5.7.0 and forge-std v1.17.0.
 
 ### Clone and install
 
@@ -88,9 +88,17 @@ Counts on 8 October 2026:
 npm run prove
 ```
 
-This is a dry run. It prints the plan for buying 1 USDT of NVDAB, lists the tokens the vault accepts, and signs nothing. To spend real money on BNB Chain, run `MOI_LIVE=1 npm run prove`. That buys 1 USDT of NVDAB, gifts it, claims it into a brand-new wallet through the relayer, and checks every step on chain. Both modes read the full environment first, so fill in `.env` as described below.
+If you want proof with no setup at all, use the three `cast` reads in [Prove it](/docs/contracts#prove-it) on the contracts page. They need Foundry and no keys. The prove script needs more.
 
-`npm run slice` is a smaller dry run: a live quote, the checks and the simulations, with nothing signed.
+Both modes read the whole `.env` first and stop with a named error unless `OC_API_KEY`, `OC_SECRET_KEY`, `DEPLOYER_PRIVATE_KEY` and `RELAYER_PRIVATE_KEY` are all present and well formed, even in the dry run. `MOI_VAULT_ADDRESS` is optional in the dry run and required in the live run.
+
+The dry run, `npm run prove`, reads the chain, asks Binance for a quote and a swap for 1 USDT of NVDAB for the deployer wallet, lists the tokens the vault accepts and prints the plan. The script checks no balance, signs nothing and sends nothing, and it ends with `Dry run complete. Nothing was signed or sent.`
+
+The live run, `MOI_LIVE=1 npm run prove`, spends 1 USDT on mainnet. The deployer wallet signs and sends the USDT approval for the trading router (only if its allowance is short), the swap into NVDAB, the vault approval and `createGift`. The relayer wallet then sends the claim into a brand-new wallet. So the deployer wallet needs at least 1 USDT and some BNB for gas, and the relayer wallet needs some BNB. The run prints `PROVED: bought, gifted and claimed into a brand-new wallet through the relayer.` only after it has checked every step on chain.
+
+Before it sends anything, the live run refuses to start unless the vault lists NVDAB, is not paused and names the address of `RELAYER_PRIVATE_KEY` as its relayer. So it cannot claim through Moi's own relayer. Run it against a vault you deployed yourself with `packages/contracts/deploy.sh`. Also set `MOI_SPONSOR_ADDRESS` to the deployer wallet's address. The run's gift is not wrapped, and the claim rule delivers an unwrapped gift only from the sponsor wallet. Without that setting the claim is refused after the gift is locked, and the gift waits in the vault until it expires and `refund` returns it.
+
+`npm run slice` is a smaller dry run: a live quote, the checks and the simulations, with nothing signed. It needs the same four keys.
 
 ### Run the attacks
 
@@ -110,7 +118,7 @@ Copy `.env.example` to `.env` at the repo root and fill it in. Never commit it. 
 | `OC_API_KEY`, `OC_SECRET_KEY` | Your credentials for the Binance Web3 API. Moi signs every request to Binance with them. | The Binance Web3 API developer portal, at web3.binance.com/en/dev-portal |
 | `DEPLOYER_PRIVATE_KEY` | Deploys the vault and acts as the test sender in scripts. Fund it with a little BNB and USDT on BNB Smart Chain. | A new wallet you make for this |
 | `RELAYER_PRIVATE_KEY` | Sends claims and pays their gas. It holds nothing else. Fund it with a little BNB. | A second new wallet |
-| `ETHERSCAN_API_KEY` | Verifies the vault on BscScan. | A key from etherscan.io/myapikey. The free plan refused BNB Chain when checked on 7 October 2026, and Sourcify verification needs no key |
+| `ETHERSCAN_API_KEY` | Used only by `packages/contracts/verify.sh`, which stops at the start if it is empty. Nothing else reads it. | A key from etherscan.io/myapikey. The free plan did not cover BNB Chain when checked on 7 October 2026, so the BscScan step needs a paid plan. The Sourcify step needs no key, and the live vault's source is verified there |
 | `NEXT_PUBLIC_PRIVY_APP_ID` | The Privy app that signs the friend in. It is public, not a secret, and exactly 25 characters. | An app created at dashboard.privy.io |
 | `MOI_RELAYER_ADDRESS` | The public address of the relayer wallet. The deploy script reads it so it never needs the relayer key. | The address of the relayer wallet |
 | `MOI_OWNER_ADDRESS` | The wallet that will own the vault. The deploy offers ownership to it, and it accepts with one signature. Required for a mainnet deploy. | The address of a wallet you control |

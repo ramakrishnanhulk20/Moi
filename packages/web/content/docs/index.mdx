@@ -26,13 +26,12 @@ Everything below is on BNB Smart Chain mainnet, chain id 56. You can check each 
 | Source code | Verified on Sourcify as an exact match on 7 October 2026 |
 | Relayer (sends claims and pays their gas) | [0x93596EBf4e4B3ACEAb8Af2B4FeA6157e3F7fb7A9](https://bscscan.com/address/0x93596EBf4e4B3ACEAb8Af2B4FeA6157e3F7fb7A9) |
 | Stocks you can give | AAPLB, NVDAB, TSLAB, MSFTB, AMZNB, GOOGLB, METAB, SPYB, QQQB |
-| Gifts made | 10 on 8 October 2026 (block 126,426,962): 2 opened, 8 waiting to be opened |
 
-To count the gifts yourself, read `nextGiftId()` on the vault and subtract one. The [contracts page](/docs/contracts) lists every function.
+On 9 October 2026, at block 126,600,254, the vault had made 11 gifts: 4 opened (gifts 1, 2, 3 and 11) and 7 waiting to be opened (gifts 4 to 10), and the waiting ones are the judge gifts. For the count right now, read the LIVE ON BNB CHAIN band on the [home page](https://moi-gift.vercel.app), or read `nextGiftId()` on the vault and subtract one. The [contracts page](/docs/contracts) lists every function.
 
 ### The live transactions
 
-These five transactions were all successful on chain when this page was written.
+These seven transactions were all successful on chain when this page was written.
 
 | Step | What happened | Transaction |
 |---|---|---|
@@ -41,10 +40,16 @@ These five transactions were all successful on chain when this page was written.
 | Gift 1 claimed | Moi's relayer claims it into a brand-new wallet and pays the 127,109 gas | [0x6a13...78e8](https://bscscan.com/tx/0x6a13e2e8f14630a8a4777bf7bae7befa21154fe64ba0e64d58a7ccdca71978e8) |
 | Gift 2 wrapped | Made by the Binance Agentic Wallet, and the 5-cent gift wrap paid with b402 | [0x8ec1...38d6](https://bscscan.com/tx/0x8ec1e0666350aa500bbf2f7d36b1cd97bb8dfb2e9fd5ba328b75b899a36c38d6) |
 | Gift 2 claimed | Claimed with no gas paid by the friend | [0x660e...e28e](https://bscscan.com/tx/0x660e8ebcc983db623db05e87fa7e0c7f4583ff208f7fdb884864d86c0825e28e) |
+| Gift 3 claimed | A judge gift, claimed from the home page's judges section on 9 Oct 2026 | [0x2964...0eb6](https://bscscan.com/tx/0x2964c2a78897a96976e4237bd103c6e7c163eabbf2a8a956e5e0873fba000eb6) |
+| Gift 11 claimed | Claimed on a phone with Google on 9 Oct 2026, about 25 seconds after opening the link | [0x9342...c73d](https://bscscan.com/tx/0x9342094463ac3c5b725b061e6f6a8e9a40da25041e2f43931c28c37ef4b7c73d) |
+
+### How long a claim takes
+
+About thirty seconds is the design target. It was measured once, by hand: on 9 October 2026 a phone claim with Google took about 25 seconds from opening the link to owning the share (gift 11, claim transaction [0x9342...c73d](https://bscscan.com/tx/0x9342094463ac3c5b725b061e6f6a8e9a40da25041e2f43931c28c37ef4b7c73d)). The judge claim worked the same day (gift 3, claim transaction [0x2964...0eb6](https://bscscan.com/tx/0x2964c2a78897a96976e4237bd103c6e7c163eabbf2a8a956e5e0873fba000eb6)). One run is not an average.
 
 ## What a judge can try in two minutes
 
-The judges section on the home page hands out one real stock gift of about one US dollar to each judge. You sign in with Google or email, type the judge code from our submission, tick the declaration that you are not a US person and not in a restricted place, and tap once. Moi sends the gift to the wallet it made for you and pays the network fee.
+The judges section on the home page hands out one real stock gift of about one US dollar to each judge. You press "Sign in to claim" and sign in with Google or email, type the judge code from our submission, tick the declaration that you are not a US person and not in a restricted place, and press "Claim my share". Moi sends the gift to the wallet it made for you and pays the network fee.
 
 The steps, the limits and the errors you may meet are in [Getting started](/docs/getting-started#for-a-judge).
 
