@@ -6,7 +6,7 @@ Send someone their first stock as a link. They sign in with Google and own a rea
 
 Moi is the gift of money that Tamil families give at weddings, written in the family's notebook so it can be returned one day; here the gift is a real share of a company and the notebook is BNB Chain.
 
-[Live app](https://moi-gift.vercel.app) · [Documentation](https://moi-gift.vercel.app/docs)
+[Live app](https://moi-gift.vercel.app) · [Documentation](https://moi-gift.vercel.app/docs) · [Demo video](https://youtu.be/bxU5j6-v_Fw)
 
 Built for BNB Hack: Tokenized Stocks Edition. Everything below runs on BNB Smart Chain mainnet (chain id 56) with real tokenized stocks.
 
